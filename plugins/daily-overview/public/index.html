@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>每日处理记录 · Agent Autoloop</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="masthead"><div class="brand">Agent Autoloop<span>每日处理记录</span></div><span class="readonly">本机 · 只读查看</span></header>
+  <section class="intro" aria-labelledby="page-title">
+    <div><h1 id="page-title">每日处理记录</h1><p>看清这一天做了什么，沿着记录核对每一步。</p></div>
+    <nav class="date-nav" aria-label="切换日期">
+      <button id="previous" type="button">前一天</button>
+      <input id="date" aria-label="选择日期" type="date">
+      <button id="next" type="button">后一天</button>
+      <button id="today" class="primary" type="button">今天</button>
+    </nav>
+  </section>
+  <section class="toolbar" aria-label="筛选记录">
+    <div class="filters">
+      <label>规则<select id="rule"><option value="">全部规则</option></select></label>
+      <label>状态<select id="state"><option value="">全部状态</option></select></label>
+      <label class="search"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.3"/><path d="m12 12 5 5"/></svg><span class="sr-only">搜索记录</span><input id="search" type="search" placeholder="搜索事情、结论或对象编号"></label>
+      <button id="clear" class="quiet" type="button" hidden>清除筛选</button>
+    </div>
+    <button id="refresh" class="quiet" type="button">刷新记录</button>
+  </section>
+  <div class="observation"><p id="observation">正在读取记录…</p><p id="sync" role="status">正在连接中台</p></div>
+  <div id="error" class="error" role="alert" hidden></div>
+  <main class="workspace" id="workspace" aria-busy="true">
+    <div class="list">
+      <section aria-labelledby="activity-title"><div class="section-heading"><h2 id="activity-title">当天有活动 <span id="activity-count"></span></h2><p id="day-label"></p></div><div class="cols" aria-hidden="true"><span>事情与回执结论</span><span>执行状态</span><span>执行耗时</span><span>处理历时</span></div><div id="activities"><p class="empty">正在读取当天的处理记录…</p></div></section>
+      <section class="pending" aria-labelledby="pending-title"><div class="section-heading"><h2 id="pending-title">截至当日仍待处理 <span id="pending-count"></span></h2><p>可能包含上方记录</p></div><div id="pending"></div></section>
+    </div>
+    <aside class="detail" id="detail" aria-label="事情详情"><div class="detail-empty"><h2>选择一件事情</h2><p>在这里并排查看回执、处理过程和来源。</p></div></aside>
+  </main>
+  <footer><p>执行结束表示本轮已结束，不代表业务已验收。执行耗时从领取算到提交结果，等待和重试间隔不计入。</p><p>记录来自中台公开只读接口；回执摘要不等于完整会话。</p></footer>
+  <noscript><p class="error">请启用 JavaScript 后查看处理记录。</p></noscript>
+</body>
+</html>

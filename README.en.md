@@ -16,7 +16,7 @@ Most of us use command-line agents like Claude Code or Codex by babysitting a te
 
 - **One machine, one install command.** Runs on your Mac or Linux machine. No cloud server or inbound ports required.
 - **Connect a new agent in one line.** No SDK, no agent source code to fork. Any CLI tool that takes a prompt and prints a final reply can plug in.
-- **No web dashboard.** Cards reach you on Feishu, DingTalk, WeCom, Slack, Discord, or desktop notifications when you are needed. Everything else is one command away.
+- **Cards for decisions, a read-only plugin for daily review.** Cards reach you on Feishu, DingTalk, WeCom, Slack, Discord, or desktop notifications. Run `agent-autoloop overview` to see daily work, receipts, and elapsed time in your local browser.
 
 ## Get started
 
@@ -54,6 +54,12 @@ Agent 结束了这一轮，问了你一个问题。它现在不占进程、不�
 ```
 
 In an interactive terminal, just type the option number. In a non-interactive terminal, run `agent-autoloop answer 1 2` to pick green. Then `agent-autoloop status` shows that the agent resumed its conversation and finished, along with rounds, tokens, and cost for today and the past seven days ([how they are counted](skills/agent-autoloop/SKILL.md#看情况回答)).
+
+## Review daily activity
+
+Run `agent-autoloop overview` to start the independent local plugin and open your browser. The list shows business items active that day and items still pending at the cutoff; the adjacent details show receipts, attempts, retries, questions, answers, and source/session links. Filter by date, rule, status, or text. Today refreshes automatically; past dates retain their end-of-day state.
+
+The plugin ships in `plugins/daily-overview/`, uses existing owner HTTP reads, and changes neither the kernel nor business records. Use `--no-open` to print the URL, `--port <port>` to choose its local port, and Ctrl+C to exit. Version one has no usage or cost display. An execution ending is not business acceptance. Historical replay can be incomplete while synchronizing; the page states its coverage. See the [calculation rules and limits](docs/daily-overview.md).
 
 ## How a piece of work flows
 

@@ -21,6 +21,8 @@ const HELP = `Agent 自动化中台
   agent-autoloop init [--agent claude|codex] [--command '某个命令 {prompt}'] [--port 3350] [--no-service]
                                     在这台电脑上装好：一个人一台电脑就够
   agent-autoloop try                     用你的 Agent 跑一遍完整流程
+  agent-autoloop overview [--port 端口] [--no-open]
+                                    打开只读的每日处理记录
   agent-autoloop why <第几轮> [--json]  查看时间线；--json 输出原始事实
   agent-autoloop conformance <地址> --config <测试凭据文件>
                                     在测试中台上检查协议
@@ -588,6 +590,7 @@ const commands: Record<string, () => unknown> = {
   },
   status,
   why: () => why(args),
+  overview: async () => (await import("../plugins/daily-overview/run.ts")).main(args),
   conformance: () => checkConformance(args),
   answer: () => answer(args),
   resolve: () => resolve(args),
