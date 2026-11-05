@@ -13,7 +13,9 @@ description: 配置 Agent 自动化中台：加规则、接新的事件插件、
 
 续接会话也只算这次新增的用量。`worker/usage/` 存着相减要用的累计值，没有记录的续接（比如删了这个目录，或这个会话超过 90 天没用）这次不报 Codex 的 Token 和 Claude Code 的费用，下一次恢复正常。本人打开链接在同一个会话里接着聊用掉的量，会算进下一次续接。旧回执不重算。
 
-这里没有网页。用户想要一个页面看全局，就替他写一个：读 `GET /v1/state`，密钥是 `config.json` 的 `owner`，请求见 `docs/protocol.md` 的「本人」一节。
+用户想按天看处理过的事情、回执、状态和耗时，运行 `agent-autoloop overview`。这是 `plugins/daily-overview/` 自带的独立本机只读客户端，按需启动，Ctrl+C 退出；`--no-open` 不自动打开浏览器。日期沿用规则时区，今天自动更新，过去日期保留日终状态。首版不展示用量，不提供回答或停止。密钥留在插件服务端，缓存放在 `~/.agent-autoloop/cache/daily-overview/`。首次同步可能不完整，不能把暂缺记录当成没有工作。具体口径见 `docs/daily-overview.md`。
+
+其他客户端仍通过 `docs/protocol.md`「本人」一节的现有接口读取，不直接访问中台数据库或导入内核。
 
 ## 改规则
 

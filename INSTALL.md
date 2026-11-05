@@ -2,6 +2,12 @@
 
 用户请你装好 Agent 自动化中台。先安装，再走一遍提问和继续处理；能自己做的直接做。
 
+## 每日处理记录插件
+
+装好中台后，运行 `agent-autoloop overview`，按需打开本机只读页面；`--no-open` 只打印入口链接，`--port 端口` 指定端口。按 Ctrl+C 退出，不影响中台。无需修改规则，不另启 Agent、通道或事件监听。
+
+插件随程序安装到 `~/.agent-autoloop/app/plugins/daily-overview/`，升级跟随程序。它读取 `config.json` 的 `url` 和 `owner`，只监听 `127.0.0.1`。只在有本人配置的电脑运行，不把密钥复制到浏览器。可重建缓存位于 `~/.agent-autoloop/cache/daily-overview/`，使用 `AGENT_AUTOLOOP_HOME` 时随该目录；需要重建时先退出插件，再删除该插件缓存。缓存包含事件和回执等私有资料；不要公开入口链接或缓存。
+
 ## 安装
 
 支持 macOS、Linux。Windows 版待定：作者这个周末（11 月 7、8 日）回家后开发并做兼容性测试，进度见 [#17](https://github.com/KKKKhazix/agent-autoloop/issues/17)，现在还不能装。需要 Node.js 24 或更新、Git、curl，以及一个已经登录的命令行 Agent。

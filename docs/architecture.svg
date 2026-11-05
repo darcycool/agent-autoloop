@@ -151,6 +151,13 @@ text{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK S
 <text x="248" y="493" class="you-t" text-anchor="middle">你</text>
 <text x="248" y="517" class="you-s" text-anchor="middle">只管拍板</text>
 
+<!-- Independent owner client; no new kernel interface. -->
+<rect class="plug" x="22" y="454" width="132" height="88" rx="14"/>
+<text x="88" y="481" class="r" text-anchor="middle">每日记录插件</text>
+<text x="88" y="503" class="s" text-anchor="middle">本机浏览器</text>
+<text x="88" y="524" class="s" text-anchor="middle">只读本人 HTTP 接口</text>
+<path class="flow" d="M172 498H156"/>
+
 <!-- 5: 你的回答 -> 回到内核接着干 -->
 <path class="conn" d="M248 452V410H400V386"/>
 <circle class="badge" cx="324" cy="410" r="12"/>
