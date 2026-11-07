@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { HOME } from "./home.ts";
 import { stablePath } from "./node-path.ts";
-import { powershell, processCommand, psQuote } from "./command.ts";
+import { powershell, processCommandSync, psQuote } from "./command.ts";
 
 const PROGRAM = path.join(import.meta.dirname, "..", "bin", "agent-autoloop.ts");
 /** Another install on this machine (another AGENT_AUTOLOOP_HOME) has a service of its own. */
@@ -161,7 +161,7 @@ export function runningUp() {
   const pid = readFileSync(file, "utf8").trim();
   let command = "";
   try {
-    command = processCommand(Number(pid));
+    command = processCommandSync(Number(pid));
   } catch {}
   return /agent-autoloop(\.ts)?"? up\b/.test(command) ? Number(pid) : null;
 }
