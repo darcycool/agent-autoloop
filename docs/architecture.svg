@@ -149,7 +149,7 @@ text{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK S
 <path class="both" d="M388 498H328"/>
 <rect class="you" x="172" y="454" width="152" height="88" rx="26"/>
 <text x="248" y="493" class="you-t" text-anchor="middle">你</text>
-<text x="248" y="517" class="you-s" text-anchor="middle">只管拍板</text>
+<text x="248" y="517" class="you-s" text-anchor="middle">选一项，或说想法</text>
 
 <!-- Independent owner client; no new kernel interface. -->
 <rect class="plug" x="22" y="454" width="132" height="88" rx="14"/>
@@ -162,7 +162,7 @@ text{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK S
 <path class="conn" d="M248 452V410H400V386"/>
 <circle class="badge" cx="324" cy="410" r="12"/>
 <text x="324" y="414.5" class="n" text-anchor="middle">5</text>
-<text x="232" y="415" class="l" text-anchor="end">点一下，接着原对话干完</text>
+<text x="232" y="415" class="l" text-anchor="end">回答后，接着原对话处理</text>
 
 <!-- 底部：交付流水线 -->
 <rect class="plug" x="22" y="584" width="916" height="72" rx="14"/>

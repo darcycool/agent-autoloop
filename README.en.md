@@ -71,6 +71,8 @@ The numbers match the diagram above:
 4. **Asks only when needed.** For sensitive actions like deleting data, restarting a service, spending money, or messaging people, the kernel sends you a card through Feishu or a desktop notification. While you take your time, no agent process runs and no tokens are spent.
 5. **One tap resumes it.** Your answer picks up the original conversation and finishes the job.
 
+If neither option fits, use the free-answer field below the options on the Feishu card and press “发送给 Agent” (Send to Agent). You can say “Neither; don't execute yet. Let's discuss a cheaper approach.” If another decision is needed, the agent sends a new card. Card links also accept free text, as does `agent-autoloop answer <card-id> --text "your thoughts"`. Each card accepts one answer; ordinary Feishu chat messages are not forwarded to the agent.
+
 Anything the agent can handle alone takes the auto-loop at the top of the diagram: finish outright, or schedule a follow-up check (say, in 30 minutes) without bothering you.
 
 ## Day-to-day usage
@@ -127,12 +129,13 @@ Besides `ask`, receipts can send notifications (`notice`), resolve open cards (`
 
 ## Ready-to-use recipes
 
-Each recipe includes rules, a task Skill, and setup instructions (written in Chinese).
+Each recipe includes rules, handling instructions, and setup instructions (written in Chinese).
 
 | Task | Included workflow |
 |---|---|
 | [Morning brief](examples/recipes/morning-brief/README.md) | Summarize local notes and Git commits at 8 AM by default; write `briefs/YYYY-MM-DD.md` |
 | [GitHub issues](examples/recipes/github-issues/README.md) | Poll every five minutes, edit code locally, and notify you to review; no commits, pushes, or issue replies |
+| [Tooodo tasks](examples/recipes/tooodo/README.md) | Poll every minute; record personal tasks and send automation tasks to Codex after project selection, then write verified results back and complete the task |
 | [Production alerts](examples/recipes/ops-alerts/README.md) | Receive an error, investigate local code, ask before restarting, and continue after your answer |
 | [User feedback](examples/recipes/feedback/README.md) | Re-read current feedback, fix, deliver and verify, then prepare a reply; ask you in Feishu and resume after your answer |
 | [Website watch](examples/recipes/website-watch/README.md) | Check status and expected content every five minutes; wake the agent on a new incident, keep ongoing failures quiet, and update the card on recovery |
@@ -156,7 +159,7 @@ Built-in plugins ship with the program and are enabled through configuration. Us
 | **Channels**: how cards reach you | [Desktop notifications](plugins/desktop/channel.ts) (on by default), [Feishu](plugins/feishu/channel.ts), [DingTalk / WeCom / Slack / Discord](plugins/webhook/templates.ts) | [Guide](skills/agent-autoloop/SKILL.md#接一个通道) |
 | **Delivery**: CI/CD as a plugin | [`delivery`](plugins/delivery/delivery.ts) | [Guide](skills/agent-autoloop/SKILL.md#交付流水线) |
 
-**What has been tested:** Claude Code, Codex, and ACP (with the official Codex ACP adapter) have run multi-turn Q&A and session resumption across processes. Feishu has run real delivery, button callbacks, and card updates. The four webhook templates have only been checked against local mock servers, and the GitLab webhook against the payloads in its docs, not a real GitLab. These text channels answer through a link, so `hub.publicUrl` must be reachable from your phone or computer.
+**What has been tested:** Claude Code, Codex, and ACP (with the official Codex ACP adapter) have run multi-turn Q&A and session resumption across processes. Feishu has run real delivery, button callbacks, and card updates; the new free-answer form for questions has only been verified with a fake CLI. The four webhook templates have only been checked against local mock servers, and the GitLab webhook against the payloads in its docs, not a real GitLab. These text channels answer through a link, so `hub.publicUrl` must be reachable from your phone or computer.
 
 **Other CLI agents connect in one line.** Set `use: "command"` and pass a command array; `{prompt}` is a single argument, never evaluated as shell code. These commands come from each tool's official docs, and we have not run each of them yet:
 

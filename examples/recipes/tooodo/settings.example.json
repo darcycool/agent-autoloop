@@ -1,0 +1,8 @@
+{
+  "url": "http://127.0.0.1:43170",
+  "dataRoot": "/Users/you/Library/Application Support/Tooodo",
+  "projects": {
+    "app": { "name": "我的应用", "cwd": "/Users/you/code/app" },
+    "website": { "name": "我的网站", "cwd": "/Users/you/code/website" }
+  }
+}

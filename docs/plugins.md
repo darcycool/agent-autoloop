@@ -82,6 +82,8 @@ Claude 委托 Codex 的完整规则、Skill 和参数调用脚本见[浏览器�
 
 能收回调的通道要在规则里设置 `answerers`，没设时通道里谁都能回答，`doctor` 会提醒；只能发文字的通道设置 `links: true`，发送 `card.link`。拿到链接的人能回答这张卡片。
 
+提问的自由回答调用 `hub.answer(id, { text, by, ref })`，不带 `choice`，沿用相同的回答人和原消息核验。内置飞书提问卡片在选项后提供文字表单，提交按钮名带卡片编号，`form_value.text` 带回答；空白文字不提交。按飞书[输入框](https://open.feishu.cn/document/feishu-cards/card-json-v2-components/interactive-components/input)文档，`max_length` 只能取 1–1000，因此飞书表单限 1000 字；中台文字回答的上限仍为 4000 字。提交按钮使用[按钮](https://open.feishu.cn/document/feishu-cards/card-json-v2-components/interactive-components/button)文档的 `form_action_type: "submit"`。每张卡片只接受第一次回答，需要继续讨论就由 Agent 再发卡片，不监听普通聊天消息。
+
 通道和中台共用一个 Node 进程，外部调用应异步等待。内置飞书通道的用户查询、发送和更新均异步调用 CLI，发送期间中台仍能接收事件和心跳。
 
 ## 事件插件

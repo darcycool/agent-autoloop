@@ -19,8 +19,9 @@ function safeJson(text: unknown): any {
 
 function outcomeOf(card: Card) {
   const chosen = card.choice === null ? card.answer : card.options[card.choice];
-  if (card.state === "decided") return `你选了「${chosen}」，已记录，等待处理。`;
-  if (card.state === "done") return `你选了「${chosen}」。${card.result ? `已执行：${card.result}` : "已执行。"}`;
+  const said = card.choice === null ? "你说了" : "你选了";
+  if (card.state === "decided") return `${said}「${chosen}」，已记录，等待处理。`;
+  if (card.state === "done") return `${said}「${chosen}」。${card.result ? `已执行：${card.result}` : "已执行。"}`;
   if (card.state === "closed" && card.kind === "ask") return `不用决定了：${card.result ?? ""}`;
   return card.state === "closed" && card.result ? card.result : null;
 }
@@ -28,6 +29,7 @@ function outcomeOf(card: Card) {
 /** One card, as it looks now: the options while it's open, what became of it after. */
 export function render(card: Card) {
   const outcome = outcomeOf(card);
+  const notice = card.kind === "notice";
   // Each option is a block across the card, its words wrapping: buttons in a row, one line high, cut long options off.
   const option = (label: string, index: number) => ({
     tag: "interactive_container",
@@ -39,40 +41,41 @@ export function render(card: Card) {
     behaviors: [{ type: "callback", value: { card: card.id, choice: index } }],
     elements: [{ tag: "div", text: { tag: "plain_text", content: label } }],
   });
-  const afterwards = outcome ? [{ tag: "markdown", content: `**${outcome}**` }] : [];
+  const afterwards = outcome ? [{ tag: "div", text: { tag: "plain_text", content: outcome } }] : [];
   const noteSaid =
     card.kind === "notice" && card.answer
       ? [{ tag: "div", text: { tag: "plain_text", content: `处理说明：${card.answer}` } }]
       : [];
-  const noteForm =
-    card.kind === "notice"
-      ? [
-          {
-            tag: "form",
-            name: "handling_note",
-            elements: [
-              {
-                tag: "input",
-                name: "note",
-                input_type: "multiline_text",
-                rows: 2,
-                auto_resize: true,
-                max_length: 1000,
-                label: { tag: "plain_text", content: "处理说明（可不填）" },
-                label_position: "top",
-                placeholder: { tag: "plain_text", content: "比如：已回复他视频下周发；或：群发广告，不用管" },
-              },
-              {
-                tag: "button",
-                name: `handling_note_submit_${card.id}`,
-                form_action_type: "submit",
-                type: "primary",
-                text: { tag: "plain_text", content: "记录并结案" },
-              },
-            ],
-          },
-        ]
-      : [];
+  const form = {
+    tag: "form",
+    name: notice ? "handling_note" : "free_answer",
+    elements: [
+      {
+        tag: "input",
+        name: notice ? "note" : "text",
+        input_type: "multiline_text",
+        rows: notice ? 2 : 3,
+        auto_resize: true,
+        required: !notice,
+        max_length: 1000,
+        label: { tag: "plain_text", content: notice ? "处理说明（可不填）" : "说说我的想法" },
+        label_position: "top",
+        placeholder: {
+          tag: "plain_text",
+          content: notice
+            ? "比如：已回复他视频下周发；或：群发广告，不用管"
+            : "比如：两个都不选，先别执行。我想先讨论有没有成本更低的方案。",
+        },
+      },
+      {
+        tag: "button",
+        name: `${notice ? "handling_note" : "free_answer"}_submit_${card.id}`,
+        form_action_type: "submit",
+        type: "primary",
+        text: { tag: "plain_text", content: notice ? "记录并结案" : "发送给 Agent" },
+      },
+    ],
+  };
   return {
     schema: "2.0",
     config: { update_multi: true, enable_forward: false },
@@ -83,7 +86,11 @@ export function render(card: Card) {
     body: {
       elements: [
         ...(card.text ? [{ tag: "markdown", content: card.text }] : []),
-        ...(card.state === "open" ? [...noteForm, ...card.options.map(option)] : [...afterwards, ...noteSaid]),
+        ...(card.state === "open"
+          ? notice
+            ? [form, ...card.options.map(option)]
+            : [...card.options.map(option), form]
+          : [...afterwards, ...noteSaid]),
       ],
     },
   };
@@ -161,21 +168,24 @@ export default async function feishu({ hub, options, log, signal }: ChannelConte
     const form = safeJson(event.form_value);
     const value = safeJson(event.action_value);
     // A form's submit button can't carry a value, so its name holds the card's number.
-    const named = /^handling_note_submit_(\d+)$/.exec(String(event.action_name ?? ""));
-    const cardId = Number.isInteger(value?.card) ? value.card : named ? Number(named[1]) : null;
+    const named = /^(handling_note|free_answer)_submit_(\d+)$/.exec(String(event.action_name ?? ""));
+    const cardId = named ? Number(named[2]) : Number.isInteger(value?.card) ? value.card : null;
     if (!Number.isInteger(cardId)) return;
-    // A notice's only option is that it's been handled, so submitting the form picks it.
-    const choice = Number.isInteger(value?.choice) ? value.choice : form ? 0 : null;
-    if (choice === null) return;
-    const note = typeof form?.note === "string" ? form.note : undefined;
-    const given: { choice: number; by?: string; ref?: string; text?: string } = {
-      choice,
+    const given: { choice?: number; by?: string; ref?: string; text?: string } = {
       by: event.operator_id,
       ref: event.message_id,
     };
-    if (note !== undefined) given.text = note;
+    if (named?.[1] === "free_answer") {
+      if (typeof form?.text !== "string" || !form.text.trim()) return;
+      given.text = form.text;
+    } else if (named?.[1] === "handling_note") {
+      // A notice's only option is that it's been handled; a question's free answer must never pick that option.
+      given.choice = 0;
+      if (typeof form?.note === "string") given.text = form.note;
+    } else if (Number.isInteger(value?.choice)) given.choice = value.choice;
+    else return;
     const answer = await hub.answer(cardId, given);
-    const how = form ? "note submitted" : "answered";
+    const how = named ? "text submitted" : "answered";
     log(`card ${cardId}: ${how} by ${event.operator_id}, ${answer.changed ? "counted" : "already settled"}`);
   }
 

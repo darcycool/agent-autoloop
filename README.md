@@ -69,6 +69,8 @@ Agent 结束了这一轮，问了你一个问题。它现在不占进程、不�
 4. **拿不准才问你。** 碰到删数据、重启服务、花钱、对外发消息这类事，内核通过飞书或桌面通知发一张卡片给你。等你回复期间，它不占后台进程，也不消耗 Token。
 5. **点一下，接着干。** 你选完，它接上原来的对话，把剩下的活干完。
 
+选项都不合适时，在飞书卡片下方的“说说我的想法”里写要求或追问，点“发送给 Agent”。比如“两个都不选，先别执行，先讨论更省钱的方案”。需要继续确认时，它会再发一张卡片。卡片网页也能写“别的想法”，命令行可用 `agent-autoloop answer <卡片编号> --text "你的想法"`；每张卡片只接受一次回答，飞书普通私聊文字不会转给 Agent。
+
 能自己搞定的事走图上方的自动闭环：直接办完，或者约个时间（比如半小时后）再醒来复查，全程不打扰你。
 
 ## 日常怎么配？
@@ -125,12 +127,13 @@ Agent 结束了这一轮，问了你一个问题。它现在不占进程、不�
 
 ## 拿来即用的场景模板
 
-每套模板都带规则、任务 Skill 和启用说明。
+每套模板都带规则、处理约定和启用说明。
 
 | 想做什么 | 已经封装好的流程 |
 |---|---|
 | [每日早报](examples/recipes/morning-brief/README.md) | 默认每天 8 点整理本地笔记和 Git 提交，写入 `briefs/YYYY-MM-DD.md` |
 | [跟进 GitHub Issue](examples/recipes/github-issues/README.md) | 每 5 分钟查新 Issue，在本地改代码并通知你查看；不提交、不推送、不回复 Issue |
+| [Tooodo 待办](examples/recipes/tooodo/README.md) | 每分钟采集待办；本人处理只记录，自动化处理交给 Codex，多项目先选项目，核验后回写结果并完成 |
 | [线上告警排查](examples/recipes/ops-alerts/README.md) | 接收报错、对照代码查原因，需要重启时发卡片询问，回答后继续 |
 | [用户反馈处理](examples/recipes/feedback/README.md) | 重读反馈当前状态、修复、交付核实、准备回复；需要决定时飞书问你，回答后继续 |
 | [网站巡检](examples/recipes/website-watch/README.md) | 每 5 分钟检查状态和关键内容，首次异常交给 Agent，持续异常不重复通知，恢复后更新原卡片 |
@@ -154,7 +157,7 @@ Agent 结束了这一轮，问了你一个问题。它现在不占进程、不�
 | **通道**：去哪找你拍板 | [桌面通知](plugins/desktop/channel.ts)（默认开启）、[飞书](plugins/feishu/channel.ts)、[钉钉 / 企微 / Slack / Discord](plugins/webhook/templates.ts) | [说明](skills/agent-autoloop/SKILL.md#接一个通道) |
 | **交付**：把 CI/CD 也做成插件 | [`delivery`](plugins/delivery/delivery.ts) | [说明](skills/agent-autoloop/SKILL.md#交付流水线) |
 
-**实测情况：** Claude Code、Codex 和 ACP（官方 Codex ACP 适配器）跑通了多轮问答和跨进程会话续接；飞书跑通了发送、按钮回调和卡片更新；四种 Webhook 模板只在本地模拟服务上验证过，GitLab Webhook 按官方文档的格式测试，没连过真实 GitLab。这些文字通道靠回答链接拍板，要把 `hub.publicUrl` 配成手机或电脑能打开的地址。
+**实测情况：** Claude Code、Codex 和 ACP（官方 Codex ACP 适配器）跑通了多轮问答和跨进程会话续接；飞书跑通了发送、按钮回调和卡片更新，新增的提问文字表单目前只用假 CLI 验证；四种 Webhook 模板只在本地模拟服务上验证过，GitLab Webhook 按官方文档的格式测试，没连过真实 GitLab。这些文字通道靠回答链接拍板，要把 `hub.publicUrl` 配成手机或电脑能打开的地址。
 
 **其他命令行 Agent 一行接入。** 设置 `use: "command"` 并传入命令数组，`{prompt}` 作为独立参数传递，不会被当成 shell 代码执行。下面的命令整理自各家官方文档，我们还没有逐个跑过：
 

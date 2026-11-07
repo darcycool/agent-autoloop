@@ -18,6 +18,8 @@ while IFS= read -r file; do
   case "$file" in
     # tests/example-plugins.test.ts runs the commands in this tutorial.
     docs/plugins.md) kind=normal ;;
+    # The Tooodo recipe test loads these instructions through its rule generator.
+    examples/recipes/tooodo/implement.md) kind=normal ;;
     README.md | README.en.md | INSTALL.md | SECURITY.md | CONTRIBUTING.md | AGENTS.md | CONTEXT.md | PRODUCT.md | DESIGN.md | .impeccable/design.json | LICENSE) kind=docs ;;
     docs/* | .github/ISSUE_TEMPLATE/* | .github/pull_request_template.md) kind=docs ;;
     tests/simulation.test.ts) kind=full ;;

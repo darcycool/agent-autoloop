@@ -6,6 +6,9 @@
 // replacement tokens in card text rewrite a webhook template. A settled card Feishu won't let the bot change stays at the
 // version before the answer; an open one is sent again with buttons that don't count.
 // A slow CLI call must not block the hub's HTTP loop while looking up a user, sending or updating a card.
+// Free answers must reach the asking item as text, never option zero; blank forms and unrelated submits must not answer.
+// Settled free answers must display as plain text, with no form left to submit a second answer.
+// Feishu input max_length must stay within its documented 1–1000 range, even though the hub accepts longer answers.
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -48,7 +51,7 @@ test("a card shows its options while it's open, and what became of it after", ()
   assert.match(said({ ...base, state: "decided", choice: 1 }), /你选了「留着」，已记录/);
   assert.ok(!said({ ...base, state: "decided", choice: 1 }).includes("callback"));
   assert.match(said({ ...base, state: "done", choice: 0, result: "删了" }), /你选了「删」。已执行：删了/);
-  assert.match(said({ ...base, state: "decided", answer: "归档" }), /你选了「归档」/);
+  assert.match(said({ ...base, state: "decided", answer: "归档" }), /你说了「归档」/);
   assert.match(said({ ...base, state: "closed", result: "问题自己好了" }), /不用决定了：问题自己好了/);
   assert.match(said({ ...base, kind: "notice", state: "closed", options: [], result: "已处理" }), /已处理/);
   const noticeOpen = JSON.stringify(render({ ...base, kind: "notice", options: [] }).body.elements);
@@ -64,6 +67,81 @@ test("a card shows its options while it's open, and what became of it after", ()
     /处理说明：清了 3GB/,
   );
   assert.ok(!said({ ...base, kind: "notice", state: "closed", options: [], result: "已处理" }).includes("处理说明"));
+});
+
+test("feishu: an open question offers a free answer, and settled answers are plain text without controls", () => {
+  const elements = render(base).body.elements as any[];
+  const form = elements.find((element) => element.tag === "form");
+  assert.ok(form, "neither option may express what the owner wants");
+  assert.equal(elements.at(-1), form, "the existing options stay ahead of the alternative answer");
+  const input = form.elements.find((element: any) => element.tag === "input");
+  assert.equal(input.name, "text");
+  assert.equal(input.input_type, "multiline_text");
+  assert.equal(input.required, true);
+  assert.equal(input.max_length, 1000);
+  assert.equal(input.label.content, "说说我的想法");
+  const submit = form.elements.find((element: any) => element.tag === "button");
+  assert.equal(submit.name, "free_answer_submit_5");
+  assert.equal(submit.form_action_type, "submit");
+  assert.equal(submit.text.content, "发送给 Agent");
+  for (const state of ["decided", "done", "closed"] as const) {
+    const answer = "**都不选**\n先讨论 [另一种方案](https://example.test)";
+    const settled = render({ ...base, state, answer }).body.elements as any[];
+    assert.ok(!settled.some((element) => element.tag === "form" || element.tag === "interactive_container"));
+    if (state !== "closed") {
+      assert.ok(settled.some((element) => element.text?.tag === "plain_text" && element.text.content.includes(answer)));
+    }
+  }
+});
+
+test("feishu: free-answer callbacks carry words and identity without choosing an option", async () => {
+  const lark = join(dir, "lark-free-answer");
+  const event = (action_name: string, form: unknown, value = "") => ({
+    action_name,
+    form_value: JSON.stringify(form),
+    action_value: value,
+    operator_id: "ou_me",
+    message_id: "om_5",
+  });
+  const events = [
+    event("free_answer_submit_5", { text: " \n " }),
+    event("free_answer_submit_5", { text: 42 }),
+    event("free_answer_submit_5", {}),
+    event("other_submit_5", { text: "别的表单" }, JSON.stringify({ card: 5 })),
+    event("free_answer_submit_5", { text: "都不选。先别执行，讨论归档方案。" }),
+    event("", { text: "还没提交的草稿" }, JSON.stringify({ card: 5, choice: 1 })),
+    event("handling_note_submit_5", { note: "" }),
+  ];
+  writeFileSync(
+    lark,
+    `#!${process.execPath}
+if (process.argv[2] === 'event') {
+  for (const event of ${JSON.stringify(events)}) console.log(JSON.stringify(event));
+  setInterval(() => {}, 1000);
+}
+`,
+    { mode: 0o755 },
+  );
+  const stop = new AbortController();
+  const signal = AbortSignal.any([stop.signal, AbortSignal.timeout(5_000)]);
+  const calls: unknown[][] = [];
+  const hub = {
+    async nextCard() {
+      if (!signal.aborted) await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+      return { card: null };
+    },
+    async answer(...args: unknown[]) {
+      calls.push(args);
+      if (calls.length === 3) stop.abort();
+      return { changed: true };
+    },
+  };
+  await feishu({ hub: hub as any, options: { user: "ou_me", lark }, log: () => {}, signal });
+  assert.deepEqual(calls, [
+    [5, { text: "都不选。先别执行，讨论归档方案。", by: "ou_me", ref: "om_5" }],
+    [5, { choice: 1, by: "ou_me", ref: "om_5" }],
+    [5, { choice: 0, text: "", by: "ou_me", ref: "om_5" }],
+  ]);
 });
 
 test("feishu CLI calls leave the HTTP loop available", async () => {

@@ -11,6 +11,8 @@ description: 配置 Agent 自动化中台：加规则、接新的事件插件、
 
 `agent-autoloop status` 列出谁在线、等用户什么、在做什么、做过什么，还有按完成时间统计的今天和最近 7 天的轮数、Token 和费用（同一轮重试的已报用量相加，没上报的轮数会写出来）。`agent-autoloop status --json` 输出 `/v1/state` 的原样结构，给脚本和看板用。`agent-autoloop answer <卡片> <序号>` 回答，`agent-autoloop resolve <卡片> <结果>` 结案，`agent-autoloop stop <第几轮>` 停掉一轮，等整个进程组退出才报告已停。
 
+选项都不合适时，用 `agent-autoloop answer <卡片> --text "用户的想法"`，不带选项序号；也可在飞书提问卡片的“说说我的想法”里写要求或追问，点“发送给 Agent”（飞书输入框最多 1000 字，命令行最多 4000 字）。文字回答会唤醒提问的事项，尽量接续原会话。用户只想讨论时，写明“先别执行”；需要继续确认时，Agent 再用 `ask` 发一张卡片并结束本轮。每张卡片只接受一次回答，飞书普通私聊文字不会转交。
+
 续接会话也只算这次新增的用量。`worker/usage/` 存着相减要用的累计值，没有记录的续接（比如删了这个目录，或这个会话超过 90 天没用）这次不报 Codex 的 Token 和 Claude Code 的费用，下一次恢复正常。本人打开链接在同一个会话里接着聊用掉的量，会算进下一次续接。旧回执不重算。
 
 用户想按天看处理过的事情、回执、状态和耗时，运行 `agent-autoloop overview`。这是 `plugins/daily-overview/` 自带的独立本机只读客户端，按需启动，Ctrl+C 退出；`--no-open` 不自动打开浏览器。日期沿用规则时区，今天自动更新，过去日期保留日终状态。首版不展示用量，不提供回答或停止。密钥留在插件服务端，缓存放在 `~/.agent-autoloop/cache/daily-overview/`。首次同步可能不完整，不能把暂缺记录当成没有工作。具体口径见 `docs/daily-overview.md`。
