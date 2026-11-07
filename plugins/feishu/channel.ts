@@ -4,8 +4,9 @@
 //   "channels": { "feishu": { "key": "…", "user": "ou_xxx" } } in config.json
 //   "channels": { "feishu": { "name": "飞书", "answerers": ["ou_xxx"] } } in rules.json: who may answer.
 import { execFile, spawn } from "node:child_process";
-import readline from "node:readline";
 import type { Card, ChannelContext } from "../../host/channels.ts";
+import { eachLine } from "../../host/lines.ts";
+import { commandLine } from "../../host/command.ts";
 
 /** Feishu sends these values as JSON in a string, which may be empty. */
 function safeJson(text: unknown): any {
@@ -100,8 +101,10 @@ export default async function feishu({ hub, options, log, signal }: ChannelConte
   const program = (options.lark as string | undefined) ?? "lark-cli";
   const lark = async (args: string[], input: string) => {
     const printed = await new Promise<string>((resolve, reject) => {
-      const child = execFile(program, args, { encoding: "utf8", timeout: 60_000, signal }, (error, stdout) =>
-        error ? reject(error) : resolve(stdout),
+      const child = execFile(
+        ...commandLine([program, ...args]),
+        { encoding: "utf8", timeout: 60_000, signal },
+        (error, stdout) => (error ? reject(error) : resolve(stdout)),
       );
       child.stdin!.on("error", reject);
       child.stdin!.end(input);
@@ -192,17 +195,15 @@ export default async function feishu({ hub, options, log, signal }: ChannelConte
   async function listen() {
     while (!signal.aborted) {
       // stdin stays open: lark-cli ends an unbounded consume when its stdin closes.
-      const consume = spawn(program, ["event", "consume", "card.action.trigger", "--as", "bot"], {
+      const consume = spawn(...commandLine([program, "event", "consume", "card.action.trigger", "--as", "bot"]), {
         stdio: ["pipe", "pipe", "pipe"],
       });
       // Unheard, this would end the whole hub. A process that never started still closes, which starts it again below.
       consume.on("error", (error) => log(`the click listener couldn't run: ${error}`));
       const stop = () => consume.kill();
       signal.addEventListener("abort", stop);
-      readline.createInterface({ input: consume.stderr }).on("line", (line) => log(line));
-      readline
-        .createInterface({ input: consume.stdout })
-        .on("line", (line) => void clicked(line).catch((error) => log(`click not handled: ${error}`)));
+      eachLine(consume.stderr, log);
+      eachLine(consume.stdout, (line) => void clicked(line).catch((error) => log(`click not handled: ${error}`)));
       await new Promise((resolve) => consume.on("close", resolve));
       signal.removeEventListener("abort", stop);
       if (!signal.aborted) {

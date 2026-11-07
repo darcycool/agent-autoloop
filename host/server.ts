@@ -1,7 +1,7 @@
 // What the kernel's doors need from this machine: the clock, a timer for the next deadline, long polls to wake, the
 // rules file to watch, the log as a stream and the webhook plugins.
 import { watch } from "node:fs";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { RULES_FILE } from "./home.ts";
 import { loadPlugin } from "./plugins.ts";
 import * as hub from "./runtime.ts";
@@ -13,7 +13,7 @@ const LONGEST_TIMER = 2147483647;
 const TICK_RETRY = 5_000;
 
 function logStream(after: number, signal: AbortSignal, key: string) {
-  let cursor = after;
+  let position = after;
   let unsubscribe = () => {};
   let stop = () => {};
   const detach = () => {
@@ -34,8 +34,8 @@ function logStream(after: number, signal: AbortSignal, key: string) {
         if (stopped) return;
         if (!hub.whose("owner", key)) return stop();
         if (controller.desiredSize! <= 0) return;
-        for (const fact of hub.logAfter(cursor, 1)) {
-          cursor = fact.seq;
+        for (const fact of hub.logAfter(position, 1)) {
+          position = fact.seq;
           const message = `id: ${fact.seq}\nevent: fact\ndata: ${JSON.stringify(fact)}\n\n`;
           controller.enqueue(new TextEncoder().encode(message));
         }
@@ -105,7 +105,7 @@ export function makeHandler(commit = "dev") {
     arm();
   });
   const watcher = watch(dirname(RULES_FILE), (_event, file) => {
-    if (file === RULES_FILE.split("/").at(-1)) fire();
+    if (file === basename(RULES_FILE)) fire();
   });
   const handle = createHandler({
     commit,

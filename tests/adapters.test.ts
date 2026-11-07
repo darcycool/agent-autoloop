@@ -6,7 +6,10 @@
 // say it started, so the worker runs its prompt again; one that never got going says it did, so the worker doesn't start a
 // new session for it; what Claude said before a background task ended is taken for its answer, or starts the wait for a
 // turn that won't exit; the raw messages of a broken Claude run become the reason it failed. A line of output that's JSON
-// but no message, like `null`, stops a plugin reading anything.
+// but no message, like `null`, stops a plugin reading anything. A command line's placeholder pass rewrites the prompt
+// itself — a `{cwd}` or a `$&` the person wrote arrives as the folder or as `{prompt}` — so the program is asked
+// something other than what the event said. A built-in agent starts the program it finds, not the one its rules name,
+// so a wrapper that sends Claude Code to another service is never run.
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -27,6 +30,7 @@ type Adapter = import("../worker/agents.ts").Adapter;
 const claude: Adapter = (await import("../plugins/claude/agent.ts")).default;
 const codex: Adapter = (await import("../plugins/codex/agent.ts")).default;
 const command: Adapter = (await import("../plugins/command/agent.ts")).default;
+const dsh: Adapter = (await import("../plugins/dsh/agent.ts")).default;
 
 const turn = {
   prompt: "做这件事",
@@ -50,6 +54,14 @@ const stubbed = (adapter: Adapter, t: object) => {
     return null;
   }
 };
+
+test("a built-in agent starts the program its rules name, with its own arguments after it", () => {
+  for (const adapter of [claude, codex, dsh]) {
+    const argv = adapter.command({ ...turn, program: "/opt/bin/via-gateway" });
+    assert.equal(argv[0], "/opt/bin/via-gateway");
+    assert.ok(argv.includes("做这件事") || argv.some((part) => part.includes("做这件事")), "the prompt still goes in");
+  }
+});
 
 test("Claude Code: access, new and going on, model", { skip: !stubbed(claude, {}) }, () => {
   const argv = stubbed(claude, {})!;
@@ -279,13 +291,30 @@ test("a plain command: placeholders filled in, stdout is its last message, a bad
   assert.equal(command.link, undefined, "it has no session to go on in");
 });
 
+test("a plain command's prompt reaches the program as it was written, whatever it contains", () => {
+  // The prompt is what someone asked for; the placeholders belong to the command line, not to the words put in it.
+  const written = [
+    "把 {cwd} 这个词原样打印出来",
+    "价格是 $& 元",
+    "路径 $` 和 $' 也要留下",
+    "{context} 和 {prompt} 都是字面",
+  ];
+  for (const prompt of written) {
+    const argv = command.command({ ...turn, prompt, command: ["tool", "-p", "{prompt}"] });
+    assert.deepEqual(argv, ["tool", "-p", prompt], `${prompt} 传到程序时被改写了`);
+  }
+  // The command line itself still fills in, and one that names the prompt twice gets it twice.
+  const both = command.command({ ...turn, model: "m", command: ["tool", "{prompt}", "{model}"] });
+  assert.deepEqual(both, ["tool", "做这件事", "m"]);
+});
+
 test("a program that isn't there says so", () => {
   assert.throws(() => findProgram("surely-not-installed-anywhere"), /找不到 surely-not-installed-anywhere/);
 });
 
 test("a line of output that's JSON but no message is noise to every plugin", () => {
   const noise = 'null\n42\n"words"\n[]\n';
-  for (const adapter of [claude, codex, command]) {
+  for (const adapter of [claude, codex, command, dsh]) {
     assert.doesNotThrow(() => adapter.read(noise, null, ""));
     assert.doesNotThrow(() => adapter.read(noise, 0, ""));
   }

@@ -1,13 +1,19 @@
 // Reading the view: what the decisions and the doors ask of it, and the shapes they hand out.
 import { credential, type Environment } from "./credentials.ts";
 import { rows, type Fact, type Row, type View } from "./evolve.ts";
-import type { Rules } from "./rules.ts";
+import { ruleOf, type Rule, type Rules } from "./rules.ts";
 import type { Job } from "../protocol/job.ts";
 
 export function configuration(view: View, version?: number): Rules {
   const current = view.get("config", "rules");
   return (version === undefined || version === current?.version ? current : view.get("config", version))?.value;
 }
+/** The owner's pause that keeps a rule from taking work at this moment, if there is one. */
+export function pauseOf(view: View, rule: Rule, now: number): Row | null {
+  const row = view.get("pauses", rule.name);
+  return row && (row.until === null || Date.parse(row.until) > now) ? row : null;
+}
+
 export const workerOf = (view: View, run: Row) => configuration(view, run.rules_version).agents[run.agent]?.worker;
 export function agentsOf(view: View, worker: string) {
   const agents = Object.entries(configuration(view).agents);
@@ -21,9 +27,8 @@ export const workers = (view: View) =>
 
 /** What a worker's agents have on: runs in hand and runs ready to be claimed. */
 export function waitingOn(view: View, worker: string, now: number) {
-  const ready = (run: Row) => run.state === "queued" && Date.parse(run.not_before) <= now;
   return rows(view, "runs", { state: ["queued", "claimed"] }).filter(
-    (run) => workerOf(view, run) === worker && (run.state === "claimed" || ready(run)),
+    (run) => workerOf(view, run) === worker && (run.state === "claimed" || Date.parse(run.not_before) <= now),
   );
 }
 
@@ -41,8 +46,9 @@ export function sourceOf(view: View, runId: number) {
 export function openInScope(view: View, run: Row) {
   const source = sourceOf(view, run.id);
   if (!source || !run.claimed_at) return [];
-  const inScope = (card: Row) => card.grp === run.grp && card.source === source && card.created_at <= run.claimed_at;
-  return rows(view, "cards", { state: "open", grp: run.grp, source }).filter(inScope);
+  return rows(view, "cards", { state: "open", grp: run.grp, source }).filter(
+    (card) => card.created_at <= run.claimed_at,
+  );
 }
 
 export function cardView(card: Row, env: Environment, ref: string | null = null, links = false) {
@@ -72,7 +78,7 @@ export function cardView(card: Row, env: Environment, ref: string | null = null,
 
 export function jobOf(view: View, run: Row, env: Environment): Job {
   const rules = configuration(view, run.rules_version);
-  const { name, cwd, skill, prompt, emits } = rules.rules.find((rule) => rule.name === run.rule)!;
+  const { name, cwd, skill, prompt, emits } = ruleOf(rules, run.rule)!;
   const events = eventsOf(view, run.id);
   const eventIds = events.map((event) => event.id);
   const thread = { rule: run.rule, lane: run.lane };
@@ -100,7 +106,7 @@ export function jobOf(view: View, run: Row, env: Environment): Job {
       answers: answers.map(({ id: card, title, options, choice, answer: text, about, by, decided_at: at }) => {
         return { card, title, options: JSON.parse(options), choice, text, about, by, at };
       }),
-      timers: timers.filter((timer) => eventIds.includes(timer.event_id)).map(timerView),
+      timers: timers.map(timerView),
       waiting: waiting.sort((a, b) => a.at.localeCompare(b.at)).map(timerView),
       open: openInScope(view, run).map(({ id, title, text, created_at }) => ({
         card: id,
@@ -118,9 +124,8 @@ export function jobOf(view: View, run: Row, env: Environment): Job {
 }
 
 export function cancels(view: View, worker: string): number[] {
-  const stopping = (run: Row) => run.state === "claimed" && run.cancel_at !== null && workerOf(view, run) === worker;
   return rows(view, "runs", { state: "claimed" })
-    .filter(stopping)
+    .filter((run) => run.cancel_at !== null && workerOf(view, run) === worker)
     .map((run) => run.id);
 }
 

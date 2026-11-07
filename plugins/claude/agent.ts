@@ -1,5 +1,6 @@
 // Claude Code: the user's own, installed and signed in by them. This only ever runs the official program.
 import { execFileSync } from "node:child_process";
+import { commandLine } from "../../host/command.ts";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -25,7 +26,7 @@ export function inTheApp() {
 
 export default {
   command: (turn) => [
-    findProgram("claude", inTheApp),
+    turn.program ?? findProgram("claude", inTheApp),
     "-p",
     turn.prompt,
     ...(turn.resume ? ["--resume", turn.resume] : ["--session-id", turn.session]),
@@ -39,7 +40,8 @@ export default {
     PERMISSIONS[turn.access],
     "--add-dir",
     turn.folder,
-    // A worktree moves the conversation away from where a later --resume looks for it.
+    // Entering a worktree moves the whole transcript under the worktree's project folder (still so on 2.1.317): --resume
+    // finds it, but the desktop app, opening the session link from the run's folder, showed only its first message.
     "--disallowedTools=EnterWorktree,ExitWorktree",
   ],
   read(stdout, code, stderr) {
@@ -86,10 +88,12 @@ export default {
     return { text: said, ...known, usage, sessionUsage, finished: true };
   },
   link: (session) => `claude://resume?session=${session}`,
-  check() {
+  check(given) {
     try {
-      const program = findProgram("claude", inTheApp);
-      const status = JSON.parse(execFileSync(program, ["auth", "status"], { encoding: "utf8", timeout: 20_000 }));
+      const program = given ?? findProgram("claude", inTheApp);
+      const status = JSON.parse(
+        execFileSync(...commandLine([program, "auth", "status"]), { encoding: "utf8", timeout: 20_000 }),
+      );
       return status.loggedIn ? null : "Claude Code 没有登录：运行 claude auth login";
     } catch (error) {
       return `Claude Code 用不了：${(error as Error).message.split("\n")[0]}`;

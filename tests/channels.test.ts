@@ -9,6 +9,7 @@
 // Free answers must reach the asking item as text, never option zero; blank forms and unrelated submits must not answer.
 // Settled free answers must display as plain text, with no form left to submit a second answer.
 // Feishu input max_length must stay within its documented 1–1000 range, even though the hub accepts longer answers.
+// A U+2028 or U+2029 in what someone typed, which JSON leaves as it is, cuts the click's line and loses the click.
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -290,6 +291,41 @@ esac
     calls.filter((c) => c[0] === "answer"),
     [["answer", 5, { choice: 1, by: "ou_me", ref: "om_5" }]],
   );
+});
+
+test("feishu: U+2028 and U+2029 in a handling note don't lose the click", async () => {
+  const lark = join(dir, "lark-cli-separators");
+  writeFileSync(
+    lark,
+    `#!/bin/sh
+case "$*" in
+  *"event consume"*)
+    echo '{"action_name":"handling_note_submit_8","action_value":"","form_value":"{\\"note\\":\\"第一行 第二行 第三行\\"}","operator_id":"ou_me","message_id":"om_8"}'
+    exec sleep 30 ;;
+  *) cat > /dev/null; echo '{"ok":true,"data":{"message_id":"om_8"}}' ;;
+esac
+`,
+  );
+  chmodSync(lark, 0o755);
+  const stop = new AbortController();
+  const answers: unknown[][] = [];
+  let answered = () => {};
+  const click = new Promise<void>((resolve) => (answered = resolve));
+  const hub = {
+    async nextCard() {
+      // Until the click comes, however busy this machine is, or until it's clear it won't.
+      await Promise.race([click, new Promise((resolve) => setTimeout(resolve, 2_000))]);
+      stop.abort();
+      return { card: null };
+    },
+    async answer(...args: unknown[]) {
+      answers.push(args);
+      answered();
+      return { changed: true };
+    },
+  };
+  await feishu({ hub: hub as any, options: { user: "ou_me", lark }, log: () => {}, signal: stop.signal });
+  assert.deepEqual(answers, [[8, { choice: 0, by: "ou_me", ref: "om_8", text: "第一行 第二行 第三行" }]]);
 });
 
 test("feishu: a form submit carries the handling note, and the button's name finds its card", async () => {

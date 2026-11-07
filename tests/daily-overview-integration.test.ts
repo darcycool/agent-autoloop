@@ -9,7 +9,7 @@ import { Cache, Feed } from "../plugins/daily-overview/feed.ts";
 import { dateAt } from "../plugins/daily-overview/model.ts";
 import { setup } from "./helpers.ts";
 const home = setup("overview-integration");
-const hub = await import("../host/runtime.ts");
+const hub = await import("./hub.ts");
 const { serve } = await import("../host/http.ts");
 const server = serve(0);
 await once(server, "listening");
@@ -23,7 +23,6 @@ after(async () => {
   cache.close();
   server.closeAllConnections();
   server.close();
-  hub.db.close();
 });
 async function caughtUp() {
   const seq = hub.logAfter(0, 10000).at(-1)!.seq;
@@ -89,7 +88,8 @@ test("the plugin consumes real HTTP history and follows a question and timer aft
   cache = new Cache(file);
   feed = new Feed(cache, url, owner);
   feed.start();
-  hub.tick(at + 100010);
+  // Advance the fixture's clock without reloading the unrelated rules file over its in-memory configuration.
+  hub.execute("tick", [], at + 100010);
   await caughtUp();
   report = cache.latest.report(dateAt(at, "Asia/Shanghai"), at + 100020);
   assert.equal(report.activities.length, 1);
