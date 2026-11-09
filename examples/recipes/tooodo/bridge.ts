@@ -73,7 +73,13 @@ export async function collect(
   minute = Math.floor(Date.now() / 60_000),
 ): Promise<Event[]> {
   const path = (page: number) =>
-    `/records?${new URLSearchParams({ type: "task", status: "pending,in_progress", pageSize: "100", page: String(page) })}`;
+    `/records?${new URLSearchParams({
+      type: "task",
+      status: "pending,in_progress",
+      handlingMode: "automation",
+      pageSize: "100",
+      page: String(page),
+    })}`;
   const first = await request(path(1));
   const page = (minute % Math.max(1, Math.ceil(first.data.total / 100))) + 1;
   const result = page === 1 ? first : await request(path(page));

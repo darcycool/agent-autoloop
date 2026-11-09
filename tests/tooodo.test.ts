@@ -1,4 +1,4 @@
-// Failure modes: personal tasks launch Codex, edits duplicate execution, later pages disappear, a restored data
+// Failure modes: personal tasks enter the hub, edits duplicate execution, later pages disappear, a restored data
 // generation reuses old identities, task text chooses a directory, or a project answer routes another task.
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -18,9 +18,9 @@ const task = {
   id,
   type: "task",
   status: "pending",
-  handlingMode: "self",
+  handlingMode: "automation",
   version: 4,
-  displayTitle: "本人事项",
+  displayTitle: "自动化事项",
   body: "资料",
 };
 const settings = {
@@ -30,25 +30,32 @@ const settings = {
 };
 const envelope = <T>(data: T, gen = generation) => ({ data, generationId: gen });
 
-test("polling records human tasks without dispatch, automation dispatches only while pending", async () => {
+test("polling asks Tooodo for automation tasks, and dispatches only pending ones", async () => {
   const rows = [
+    { ...task, id: "33333333-3333-4333-8333-333333333333", handlingMode: "self" },
     task,
-    { ...task, id: "33333333-3333-4333-8333-333333333333", handlingMode: "automation" },
-    { ...task, status: "in_progress", handlingMode: "automation", version: 5 },
+    { ...task, status: "in_progress", version: 5 },
   ];
   const api = async (path: string) => {
-    assert.match(path, /^\/records\?type=task&status=pending%2Cin_progress&pageSize=100&page=1$/);
-    return envelope({ items: rows, total: 3, page: 1, pageSize: 100 });
+    const query = new URL(path, settings.url).searchParams;
+    assert.equal(query.get("type"), "task");
+    assert.equal(query.get("status"), "pending,in_progress");
+    assert.equal(query.get("handlingMode"), "automation");
+    assert.equal(query.get("pageSize"), "100");
+    assert.equal(query.get("page"), "1");
+    const items = rows.filter((row) => row.handlingMode === query.get("handlingMode"));
+    return envelope({ items, total: items.length, page: 1, pageSize: 100 });
   };
   const events = await collect(settings, api, 0);
   assert.deepEqual(
     events.map((e) => e.type),
-    ["task.observed", "task.automation.pending", "task.observed"],
+    ["task.automation.pending", "task.observed"],
   );
   for (const event of events) parseEvent(event);
   assert.deepEqual(await collect(settings, api, 0), events);
   assert.equal(events[0].subject, `${generation}/${id}`);
-  assert.notEqual(events[0].id, events[2].id);
+  assert.ok(events.every((event) => event.subject === `${generation}/${id}`));
+  assert.notEqual(events[0].id, events[1].id);
   assert.notEqual(
     (await collect(settings, async () => envelope({ items: [task], total: 1 }, "new-generation"), 0))[0].id,
     events[0].id,
@@ -58,7 +65,9 @@ test("polling records human tasks without dispatch, automation dispatches only w
 test("polling rotates all pages within the 100-event receipt limit and rejects mixed generations", async () => {
   const pages: number[] = [];
   const api = async (path: string) => {
-    const page = Number(new URL(path, settings.url).searchParams.get("page"));
+    const query = new URL(path, settings.url).searchParams;
+    assert.equal(query.get("handlingMode"), "automation");
+    const page = Number(query.get("page"));
     pages.push(page);
     return envelope({ items: [{ ...task, version: page }], total: 201, page, pageSize: 100 });
   };
@@ -172,6 +181,7 @@ test("the actual HTTP client authenticates and generated rules keep cwd and conc
       res.end();
       return;
     }
+    assert.equal(new URL(req.url!, "http://127.0.0.1").searchParams.get("handlingMode"), "automation");
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify(envelope({ items: [task], total: 1 })));
   });
@@ -181,7 +191,7 @@ test("the actual HTTP client authenticates and generated rules keep cwd and conc
     const configured = { ...settings, url: `http://127.0.0.1:${address.port}`, dataRoot: scratch };
     const events = await collect(configured);
     assert.equal(events.length, 1);
-    assert.equal(events[0].type, "task.observed");
+    assert.equal(events[0].type, "task.automation.pending");
     redirect = true;
     await assert.rejects(client(configured)("/records"));
     const file = join(scratch, "settings.json");
