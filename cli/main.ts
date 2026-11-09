@@ -12,17 +12,19 @@ import { HOME, RULES_FILE } from "../host/home.ts";
 import { findOnPath, psQuote } from "../host/command.ts";
 import { privateDirectory } from "../host/files.ts";
 import {
+  aboveDesktop,
   installService,
   removeService,
   restartService,
+  runningUp,
   serviceLogs,
   serviceRunning,
+  startupInstead,
   systemUnit,
   untilAnswering,
 } from "../host/service.ts";
 import { versionLine } from "../host/version.ts";
-import { spendLine } from "./spend.ts";
-import type { RunSummary } from "../host/state.ts";
+import { colorFor, render } from "./status.ts";
 import { attemptsOf, newFailure, waitingRetry } from "./try.ts";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -46,7 +48,7 @@ const HELP = `Agent 自动化中台
   agent-autoloop resolve <卡片> <结果>   这件事不用决定了，写一句结果
   agent-autoloop doctor                  查哪里没配好
   agent-autoloop check [文件]            检查规则文件，不碰中台；不写文件就查 rules.json
-  agent-autoloop rules explain           按本机 rules.json 说明生效的规则、Agent、通道和下次定时
+  agent-autoloop rules explain [文件]    按本机 rules.json（或指定草稿）说明生效的规则、Agent、通道和下次定时
   agent-autoloop pause <规则> [--reason 原因] [--until 时间]
                                     暂停一条规则：到点不跑、来事件不接，直到恢复
   agent-autoloop resume <规则>
@@ -148,7 +150,7 @@ rules.json 里这个定时任务要写 cwd；你答了，中台叫醒它的 Agen
   resolve: { flags: [], usage: "用法：agent-autoloop resolve <卡片> <结果>" },
   restore: { flags: ["yes"], usage: RESTORE_USAGE },
   resume: { flags: [], usage: "用法：agent-autoloop resume <规则>" },
-  rules: { flags: [], usage: "用法：agent-autoloop rules explain" },
+  rules: { flags: [], usage: "用法：agent-autoloop rules explain [文件]" },
   run: { flags: ["subject", "reason"], usage: "用法：agent-autoloop run <规则> [--subject 对象] [--reason 说明]" },
   service: { flags: [], usage: "用法：agent-autoloop service install|remove" },
   status: { flags: ["json"], usage: STATUS_USAGE },
@@ -216,7 +218,7 @@ function starterRules(agents: Record<string, object>, first: string) {
           "这是 agent-autoloop try 的试跑，不要改任何文件，不要做别的事。读资料文件。" +
           "如果 answers 是空的，就问一个问题：title 写“试跑：选一个颜色”，text 写“这是一次试跑，选哪个都行。”，" +
           'options 写 ["蓝色","绿色"]，key 写 try-color，第一行结论写“问了一个问题”。' +
-          "如果 answers 不是空的，第一行结论写“你选了某某，试跑通过”，把某某换成 answers 里选的那一项，不附回执。",
+          "如果 answers 不是空的，第一行结论写“你选了某某，试跑通过”，把某某换成 answers 里的 chosen（所选那项的文字），不附回执。",
       },
     ],
     elsewhere: [],
@@ -424,72 +426,10 @@ async function tryIt() {
   fail("五分钟没等到结果。运行 agent-autoloop doctor 看看。");
 }
 
-const RUN_STATES: Record<string, string> = {
-  claimed: "在跑",
-  queued: "排队",
-  done: "做完了",
-  nothing: "没事可做",
-  unknown: "不确定",
-  cancelled: "停了",
-};
-
 async function status(named: Flags) {
-  const owner = ownerClient();
-  const state = await owner.state();
+  const state = await ownerClient().state();
   if (named.json !== undefined) return console.log(JSON.stringify(state, null, 2));
-  const { totals } = state;
-  const clock = { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" } as const;
-  const at = (iso: string) => new Date(iso).toLocaleString("zh-CN", { timeZone: state.timezone, ...clock });
-  const runLine = (run: RunSummary) => {
-    const shown = run.stopping
-      ? "正在停止"
-      : run.state === "queued" && run.attempts > 0
-        ? "等重派"
-        : (RUN_STATES[run.state] ?? run.state);
-    const outcome = [run.summary, run.error].filter(Boolean).join("；");
-    const retry = run.state === "queued" && run.attempts > 0 ? `，下次 ${at(run.notBefore)}` : "";
-    return `#${run.id} ${run.rule}${run.lane ? ` ${run.lane}` : ""} ${shown}${outcome ? `：${outcome}` : ""}${retry}`;
-  };
-  console.log(
-    `在跑 ${totals.running} · 排队 ${totals.queued} · 今天做完 ${totals.doneToday} · 等你 ${state.cards.length}`,
-  );
-  console.log(`${spendLine(state.spending)}\n`);
-  for (const agent of state.agents) console.log(`${agent.online ? "●" : "○"} ${agent.name}（${agent.worker}）`);
-  for (const channel of state.channels) console.log(`${channel.online ? "●" : "○"} ${channel.name}`);
-  const paused = state.lines.filter((line: { paused?: unknown }) => line.paused);
-  if (paused.length) console.log("\n暂停中（恢复：agent-autoloop resume <规则>）");
-  for (const line of paused) console.log(`  ${line.name}${line.paused.reason ? `：${line.paused.reason}` : ""}`);
-  for (const card of state.cards) {
-    showCard(card);
-    console.log(howToAnswer(card));
-  }
-  if (state.recentCards.length) console.log("\n最近的卡片");
-  for (const card of state.recentCards.slice(0, 5)) {
-    const chosen = card.choice !== null ? card.options[card.choice] : card.answer;
-    console.log(`  #${card.id} ${card.title}：${[chosen, card.result].filter(Boolean).join("。") || card.text}`);
-  }
-  const active = state.runs.filter((run: RunSummary) => ["claimed", "queued", "unknown"].includes(run.state));
-  if (active.length) console.log("\n当前在做与异常");
-  for (const run of active) console.log(`  ${runLine(run)}`);
-  if (state.recentMatters.length) console.log("\n最近处理的事项");
-  for (const run of state.recentMatters) console.log(`  ${at(run.finishedAt)} ${runLine(run)}`);
-  const timed = [...state.lines.filter((line: { every: string | null }) => line.every), ...state.elsewhere];
-  if (timed.length) console.log("\n定时运行");
-  for (const { name, where, every, next, scheduleSummary } of timed) {
-    console.log(`  ${name}${where ? `（在别处：${where}）` : ""}：${every}，下次 ${at(next)}`);
-    if (!scheduleSummary) continue;
-    const { latest, normalToday } = scheduleSummary;
-    console.log(
-      latest
-        ? `    最近 ${at(latest.finishedAt || latest.claimedAt || latest.createdAt)} ${runLine(latest)}`
-        : "    尚未运行",
-    );
-    console.log(`    今天正常结束 ${normalToday} 轮`);
-  }
-  if (state.unrouted.length) console.log("\n没有规则接的事件");
-  for (const { source, type, subject, summary } of state.unrouted.slice(0, 5)) {
-    console.log(`  ${source} ${type} ${subject}${summary ? `：${summary}` : ""}`);
-  }
+  console.log(render(state, { color: colorFor(process.stdout, process.env), columns: process.stdout.columns }));
 }
 
 async function answer(args: string[]) {
@@ -701,9 +641,16 @@ async function restoreCommand(args: string[]) {
 
 async function rulesCommand(args: string[]) {
   const { rest } = flags(args);
-  if (rest[0] !== "explain" || rest.length > 1) return fail(TAKES.rules.usage);
+  if (rest[0] !== "explain" || rest.length > 2) return fail(TAKES.rules.usage);
+  const file = rest[1] ? path.resolve(rest[1]) : RULES_FILE;
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch (error) {
+    return fail(`读不到 ${file}：${(error as Error).message}`);
+  }
   const { explainRules } = await import("./explain.ts");
-  for (const line of explainRules(readFileSync(RULES_FILE, "utf8"), Date.now())) console.log(line);
+  for (const line of explainRules(text, Date.now())) console.log(line);
 }
 
 async function tell(args: string[]) {
@@ -770,8 +717,21 @@ async function stop(args: string[]) {
 /** A command run right after starting the service would find no hub yet: this machine's is waited for, if it has one. */
 async function waitForHub() {
   const config = readConfig();
-  if (config.hub && (await untilAnswering(config.url)) === false) {
-    console.error(`系统服务起了，但中台 20 秒内没有应答。看看日志：${serviceLogs()}`);
+  if (!config.hub) return;
+  const answering = await untilAnswering(config.url);
+  if (answering === false) {
+    const log = serviceLogs();
+    const last = existsSync(log) ? readFileSync(log, "utf8").trimEnd().split("\n").slice(-5).join("\n") : "";
+    console.error(`系统服务起了，但中台 20 秒内没有应答。看看日志：${log}${last ? `\n\n${last}` : ""}`);
+  }
+  // A login task asks for the user's limited token, and the built-in Administrator gets the full one all the same.
+  const hub = answering && process.platform === "win32" ? runningUp() : null;
+  if (hub !== null && aboveDesktop(hub)) {
+    removeService();
+    fail(
+      "登录任务拉起的中台拿到了比你的桌面高的完整管理员权限，它派的每个 Agent 也会带着，所以没有装这个任务" +
+        `（Windows 自带的 Administrator 账号会这样）。${startupInstead()}`,
+    );
   }
 }
 
