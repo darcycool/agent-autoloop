@@ -141,7 +141,7 @@ Agent 结束了这一轮，问了你一个问题。它现在不占进程、不�
 |---|---|
 | [每日早报](examples/recipes/morning-brief/README.md) | 默认每天 8 点整理本地笔记和 Git 提交，写入 `briefs/YYYY-MM-DD.md` |
 | [跟进 GitHub Issue](examples/recipes/github-issues/README.md) | 每 5 分钟查新 Issue，在本地改代码并通知你查看；不提交、不推送、不回复 Issue |
-| [Tooodo 待办](examples/recipes/tooodo/README.md) | 每分钟采集待办；本人处理只记录，自动化处理交给 Codex，多项目先选项目，核验后回写结果并完成 |
+| [Tooodo 待办](examples/recipes/tooodo/README.md) | 每分钟只采集自动化待办；未完成的交给 Codex，多项目先选项目，核验后回写结果并完成 |
 | [线上告警排查](examples/recipes/ops-alerts/README.md) | 接收报错、对照代码查原因，需要重启时发卡片询问，回答后继续 |
 | [用户反馈处理](examples/recipes/feedback/README.md) | 重读反馈当前状态、修复、交付核实、准备回复；需要决定时飞书问你，回答后继续 |
 | [网站巡检](examples/recipes/website-watch/README.md) | 每 5 分钟检查状态和关键内容，首次异常交给 Agent，持续异常不重复通知，恢复后更新原卡片 |
