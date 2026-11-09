@@ -61,6 +61,8 @@ After you answer, run agent-autoloop status to see it pick the work back up and 
 
 In an interactive terminal, just type the option number. In a non-interactive terminal, run `agent-autoloop answer 1 2` to pick green. Then `agent-autoloop status` shows that the agent resumed its conversation and finished, along with rounds, tokens, and cost for today and the past seven days ([how they are counted](skills/agent-autoloop/SKILL.md#看情况回答)).
 
+`status` lists all active rounds and rounds needing attention, then groups recent completed work by matter. Normal scheduled runs get one summary per rule, with the latest result, next run time, and today's normally completed rounds. A poll running every minute no longer crowds out other work; manual runs and stopped rounds remain visible separately. `status --json` retains raw rounds alongside the summaries. Use `agent-autoloop why <round>` for the full timeline.
+
 ## Review daily activity
 
 Run `agent-autoloop overview` to start the independent local plugin and open your browser. The list shows business items active that day and items still pending at the cutoff; the adjacent details show receipts, attempts, retries, questions, answers, and source/session links. Filter by date, rule, status, or text. Today refreshes automatically; past dates retain their end-of-day state.

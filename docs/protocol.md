@@ -273,7 +273,7 @@ GET /v1/cards/next?wait=50    Authorization: Bearer <通道的密钥>
 
 ```
 GET  /v1/state              Authorization: Bearer <本人的密钥>
-→ 200 { "seq", "totals", "cards", "recentCards", "agents", "channels", "sources", "lines", "elsewhere", "runs", "nextBefore", "hasMore", "unrouted", "spending", "timers", "now", "timezone" }
+→ 200 { "seq", "totals", "cards", "recentCards", "agents", "channels", "sources", "lines", "elsewhere", "runs", "recentMatters", "nextBefore", "hasMore", "unrouted", "spending", "timers", "now", "timezone" }
 
 POST /v1/cards/56/answer    { "choice": 1 } 或 { "text": "别的想法" }
 POST /v1/cards/56/resolve   { "reason": "不用决定了，因为……" }
@@ -314,6 +314,16 @@ POST /v1/rules/巡检/run        { "subject": "#12", "reason": "看一眼" }    
 命令行：`agent-autoloop pause <规则> [--reason 原因] [--until 时间]`、`resume <规则>`、`run <规则> [--subject 对象] [--reason 说明]`；`status` 列出暂停中的规则。
 
 `agent-autoloop check [文件]` 只读文件、校验规则，不打开中台数据库，也不把文件载入中台；不写文件名就查 `rules.json`。可以先校验一份草稿再换上去。`/v1/state` 一次给最近 60 轮，`?before=<nextBefore>` 翻更早的。
+
+### 状态展示与摘要
+
+`agent-autoloop status` 按“当前在做与异常”“最近处理的事项”“定时运行”展示。首页 `runs` 除最近 60 轮外还带上所有 `claimed`、`queued`、`unknown` 轮次，命令行把它们完整列出；失败等重试的轮次显示“等重派”、原因和下次重试时间，停止中的显示“正在停止”。`runs[].lane` 是实际的事项标识；没写 `parallel` 时是空字符串，不根据事件对象或标题另拆事项。
+
+首页 `recentMatters` 从完整历史筛选 `done`、`nothing`、`cancelled` 轮次，先排除当前定时规则中非手动运行的正常结果（`done`、`nothing`），再按 `(rule, lane)` 归并。每个事项保留完成时间最新的一轮，同一时间取编号较大的一轮；整体按完成时间、编号倒序取前 8 项，并带上轮次的展示摘要和 `lane`。因此高频定时任务不会挤掉其他事项。手动运行和中止结果仍可进入最近事项；`cancelled` 显示“停了”，有错误时附原因。
+
+首页的定时规则带 `lines[].scheduleSummary: { "latest", "normalToday" }`：`latest` 是该规则编号最大的非手动轮次的展示摘要，没有是 `null`；仍在跑、等重派或不确定时照实返回当前状态。`normalToday` 按规则时区及完成时间统计今天非手动的 `done`、`nothing` 轮数，一轮多次重试只计一次。命令行每条定时规则显示周期、下次执行时间、最近轮次的编号、状态、时间和结果，以及“今天正常结束 N 轮”；没跑过写“尚未运行”。`elsewhere` 仍只列任务所在位置、周期和下次时间。
+
+轮次展示摘要包含 `id`、`rule`、`lane`、`state`、`attempts`、`createdAt`、`claimedAt`、`finishedAt`、`notBefore`、`summary`、`error`、`stopping`、`manual`，各字段含义与 `runs` 相同。摘要都与 `seq` 在同一个状态快照内读取，独立于原始轮次分页。历史页的 `recentMatters` 是空数组，`lines[].scheduleSummary` 是 `null`；事件规则的 `scheduleSummary` 始终是 `null`。定时与否以当前生效规则为准，已删除规则的历史仍可作为最近事项显示。`status --json` 原样输出整份状态；原始 `runs`、`hasMore`、`nextBefore` 的含义不变。新增摘要和 `lane` 是兼容字段，旧客户端忽略即可，不需要修改规则或迁移历史数据。
 
 `/v1/state` 的 `spending.today`、`spending.week` 独立于分页，按规则时区的今天和过去 7 × 24 小时的完成时间汇总。每项含 `rounds`、`tokens`、`cost`、`missingTokens`、`missingCost`，后两项是没报对应用量的轮数；从未开始就取消的轮次不计入。
 

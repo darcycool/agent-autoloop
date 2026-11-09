@@ -48,6 +48,8 @@ const COUNTS = `
   SELECT rule, agent, state, COUNT(*) AS count,
     SUM(CASE WHEN state = 'queued' AND attempts > 0 THEN 1 ELSE 0 END) AS retrying,
     SUM(CASE WHEN state = 'done' AND finished_at >= ? THEN 1 ELSE 0 END) AS today,
+    SUM(CASE WHEN state IN ('done', 'nothing') AND COALESCE(manual, 0) = 0 AND finished_at >= ?
+      THEN 1 ELSE 0 END) AS normalToday,
     COALESCE(SUM(json_extract(usage, '$.input')), 0) AS input,
     COALESCE(SUM(json_extract(usage, '$.output')), 0) AS output,
     COALESCE(SUM(json_extract(usage, '$.cost')), 0) AS cost
@@ -57,6 +59,35 @@ const COUNTS = `
 const EVENTS_OF_RUN = `
   SELECT source, type, subject, summary, link FROM run_events CROSS JOIN events ON events.id = run_events.event_id
   WHERE run_events.run_id = ? ORDER BY events.id DESC LIMIT 20`;
+
+// Filter routine completions before ranking: a later poll must not hide a manual run or a stopped run.
+const RECENT_MATTERS = `WITH ranked AS (
+  SELECT id, finished_at, ROW_NUMBER() OVER (PARTITION BY rule, lane ORDER BY finished_at DESC, id DESC) AS position
+  FROM runs WHERE state IN ('done', 'nothing', 'cancelled') AND
+    (state = 'cancelled' OR COALESCE(manual, 0) <> 0 OR rule NOT IN (SELECT value FROM json_each(?)))
+), recent AS (
+  SELECT id FROM ranked WHERE position = 1 ORDER BY finished_at DESC, id DESC LIMIT 8
+)
+SELECT runs.* FROM recent CROSS JOIN runs ON runs.id = recent.id ORDER BY runs.finished_at DESC, runs.id DESC`;
+
+function summarizeRun(run: Row) {
+  return {
+    id: run.id as number,
+    rule: run.rule,
+    lane: run.lane,
+    state: run.state,
+    attempts: run.attempts,
+    createdAt: run.created_at,
+    claimedAt: run.claimed_at,
+    finishedAt: run.finished_at,
+    notBefore: run.not_before,
+    summary: run.summary ?? "",
+    error: run.error ?? "",
+    stopping: run.cancel_at !== null,
+    manual: Boolean(run.manual),
+  };
+}
+export type RunSummary = ReturnType<typeof summarizeRun>;
 
 type Reads = {
   all: <T>(sql: string, params?: SQLInputValue[]) => T[];
@@ -98,7 +129,8 @@ export function stateOf(now: number, before: number | undefined, rules: Rules, {
     const seenAt = seen.get(who) ?? null;
     return { seenAt, online: seenAt !== null && now - Date.parse(seenAt) <= ONLINE };
   };
-  const counts = all<Row>(COUNTS, [iso(dayStart(now, rules.timezone))]);
+  const today = iso(dayStart(now, rules.timezone));
+  const counts = all<Row>(COUNTS, [today, today]);
   const openCards = all<Row>("SELECT * FROM cards WHERE state = 'open' ORDER BY id DESC");
   const recentCards = all<Row>("SELECT * FROM cards WHERE state <> 'open' ORDER BY id DESC LIMIT 20");
   const timers = before
@@ -113,6 +145,21 @@ export function stateOf(now: number, before: number | undefined, rules: Rules, {
   const hasMore = page.length > PAGE;
   const byId = new Map([...page.slice(0, PAGE), ...active].map((run) => [run.id, run]));
   const visible = [...byId.values()].sort((a, b) => b.id - a.id);
+  const scheduled = rules.rules.filter((rule) => !eventRule(rule)).map((rule) => rule.name);
+  const recentMatters = before ? [] : all<Row>(RECENT_MATTERS, [JSON.stringify(scheduled)]).map(summarizeRun);
+  const scheduleSummary = (name: string) => {
+    // +id lets the rule index restrict the candidates before sorting, including a rule with no history.
+    const latest = all<Row>("SELECT * FROM runs WHERE rule = ? AND COALESCE(manual, 0) = 0 ORDER BY +id DESC LIMIT 1", [
+      name,
+    ])[0];
+    return {
+      latest: latest ? summarizeRun(latest) : null,
+      normalToday: sum(
+        counts.filter((row) => row.rule === name),
+        "normalToday",
+      ),
+    };
+  };
   // A pause past its end is lifted at the next tick; until then it already doesn't hold.
   const pauses = all<Row>("SELECT name, by, reason, since, until FROM pauses ORDER BY name").filter(
     (pause) => pause.until === null || Date.parse(pause.until) > now,
@@ -149,6 +196,7 @@ export function stateOf(now: number, before: number | undefined, rules: Rules, {
       totals: tally(counts.filter((row) => row.rule === rule.name)),
       paused: pauseOf(rule),
       skippedAt: eventRule(rule) ? null : (skippedAt.get(rule.name) ?? null),
+      scheduleSummary: before || eventRule(rule) ? null : scheduleSummary(rule.name),
     })),
     pauses,
     skipped: all<Row>(SKIPPED).map(({ paused, received_at: receivedAt, ...event }) => ({
@@ -165,23 +213,13 @@ export function stateOf(now: number, before: number | undefined, rules: Rules, {
       return { id, name, use, worker, ...(program && { program }), ...presence(`worker:${worker}`), totals };
     }),
     channels: Object.entries(rules.channels).map(([id, { name }]) => ({ id, name, ...presence(`channel:${id}`) })),
+    recentMatters,
     runs: visible.map((run) => ({
-      id: run.id as number,
-      rule: run.rule,
+      ...summarizeRun(run),
       agent: run.agent,
-      state: run.state,
-      attempts: run.attempts,
-      createdAt: run.created_at,
-      claimedAt: run.claimed_at,
-      finishedAt: run.finished_at,
-      notBefore: run.not_before,
-      summary: run.summary ?? "",
-      error: run.error ?? "",
       link: run.link ?? "",
       session: run.session,
       usage: run.usage ? JSON.parse(run.usage) : null,
-      stopping: run.cancel_at !== null,
-      manual: Boolean(run.manual),
       events: all<Row>(EVENTS_OF_RUN, [run.id]),
     })),
     hasMore,

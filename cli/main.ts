@@ -22,6 +22,7 @@ import {
 } from "../host/service.ts";
 import { versionLine } from "../host/version.ts";
 import { spendLine } from "./spend.ts";
+import type { RunSummary } from "../host/state.ts";
 import { attemptsOf, newFailure, waitingRetry } from "./try.ts";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -38,6 +39,7 @@ const HELP = `Agent 自动化中台
   agent-autoloop conformance <地址> --config <测试凭据文件>
                                     在测试中台上检查协议
   agent-autoloop status [--json]         现在什么情况：谁在线、等你什么、在做什么、做过什么、花了多少
+                                     当前轮次完整列出，最近事项归并，定时运行汇总
                                      --json 输出 /v1/state 的原始结构，给脚本用
   agent-autoloop answer <卡片> [序号] [--text 别的想法]
                                     回答一张卡片；通知不用写序号
@@ -91,6 +93,7 @@ const TRY_USAGE = `用法：agent-autoloop try
 const STATUS_USAGE = `用法：agent-autoloop status [--json]
 
 现在什么情况：谁在线、等你什么、在做什么、做过什么、花了多少。
+当前轮次完整列出，最近事项按事项归并，正常定时运行每条规则汇总展示。
   --json  输出 /v1/state 的原始结构，给脚本和看板用`;
 
 const UPDATE_USAGE = `用法：agent-autoloop update
@@ -437,6 +440,16 @@ async function status(named: Flags) {
   const { totals } = state;
   const clock = { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" } as const;
   const at = (iso: string) => new Date(iso).toLocaleString("zh-CN", { timeZone: state.timezone, ...clock });
+  const runLine = (run: RunSummary) => {
+    const shown = run.stopping
+      ? "正在停止"
+      : run.state === "queued" && run.attempts > 0
+        ? "等重派"
+        : (RUN_STATES[run.state] ?? run.state);
+    const outcome = [run.summary, run.error].filter(Boolean).join("；");
+    const retry = run.state === "queued" && run.attempts > 0 ? `，下次 ${at(run.notBefore)}` : "";
+    return `#${run.id} ${run.rule}${run.lane ? ` ${run.lane}` : ""} ${shown}${outcome ? `：${outcome}` : ""}${retry}`;
+  };
   console.log(
     `在跑 ${totals.running} · 排队 ${totals.queued} · 今天做完 ${totals.doneToday} · 等你 ${state.cards.length}`,
   );
@@ -450,21 +463,28 @@ async function status(named: Flags) {
     showCard(card);
     console.log(howToAnswer(card));
   }
-  const timed = [...state.lines.filter((line: { every: string | null }) => line.every), ...state.elsewhere];
-  if (timed.length) console.log("\n定时");
-  for (const { name, where, every, next } of timed) {
-    console.log(`  ${name}${where ? `（在别处：${where}）` : ""}：${every}，下次 ${at(next)}`);
-  }
   if (state.recentCards.length) console.log("\n最近的卡片");
   for (const card of state.recentCards.slice(0, 5)) {
     const chosen = card.choice !== null ? card.options[card.choice] : card.answer;
     console.log(`  #${card.id} ${card.title}：${[chosen, card.result].filter(Boolean).join("。") || card.text}`);
   }
-  if (state.runs.length) console.log("\n最近几轮");
-  for (const run of state.runs.slice(0, 8)) {
-    const shown = run.state === "queued" && run.attempts > 0 ? "等重派" : (RUN_STATES[run.state] ?? run.state);
-    const outcome = run.summary || run.error;
-    console.log(`  #${run.id} ${run.rule} ${shown}${outcome ? `：${outcome}` : ""}`);
+  const active = state.runs.filter((run: RunSummary) => ["claimed", "queued", "unknown"].includes(run.state));
+  if (active.length) console.log("\n当前在做与异常");
+  for (const run of active) console.log(`  ${runLine(run)}`);
+  if (state.recentMatters.length) console.log("\n最近处理的事项");
+  for (const run of state.recentMatters) console.log(`  ${at(run.finishedAt)} ${runLine(run)}`);
+  const timed = [...state.lines.filter((line: { every: string | null }) => line.every), ...state.elsewhere];
+  if (timed.length) console.log("\n定时运行");
+  for (const { name, where, every, next, scheduleSummary } of timed) {
+    console.log(`  ${name}${where ? `（在别处：${where}）` : ""}：${every}，下次 ${at(next)}`);
+    if (!scheduleSummary) continue;
+    const { latest, normalToday } = scheduleSummary;
+    console.log(
+      latest
+        ? `    最近 ${at(latest.finishedAt || latest.claimedAt || latest.createdAt)} ${runLine(latest)}`
+        : "    尚未运行",
+    );
+    console.log(`    今天正常结束 ${normalToday} 轮`);
   }
   if (state.unrouted.length) console.log("\n没有规则接的事件");
   for (const { source, type, subject, summary } of state.unrouted.slice(0, 5)) {
