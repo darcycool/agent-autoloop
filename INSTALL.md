@@ -57,7 +57,7 @@ AGENT_AUTOLOOP_REPO=/path/to/agent-autoloop sh /path/to/agent-autoloop/install.s
 
 程序装进 `~/.agent-autoloop/app`，配置和记录留在 `~/.agent-autoloop`。默认打开桌面通知；没有图形会话时安静跳过，问题仍能用 `agent-autoloop status` 查看。macOS/Linux 的命令优先放在 PATH 中的 `~/.local/bin`，否则选 PATH 里第一个可写目录，不用 sudo、不覆盖其他程序；没有位置时使用安装器打印的完整路径。
 
-安装器和中台启动时在 macOS/Linux 把数据目录设为 `0700`，Windows 则用 ACL 只允许本人和 SYSTEM 访问，包括已有目录，阻止其他系统用户读取数据库、事件和运行输出。Codex 的 Windows 沙箱会给用户目录下的文件夹加上它的账号的读权限，数据目录也在内；中台启动时收回，在那之前沙箱里的命令能读到主密钥和配置里的密钥。插件另外给每轮的 `context.json` 加这个读权限。升级后同步重启中台与接单程序；新版 `status` 使用中台提供的费用汇总。
+安装器和中台启动时在 macOS/Linux 把数据目录设为 `0700`，Windows 则用 ACL 只允许本人和 SYSTEM 访问，包括已有目录，阻止其他系统用户读取数据库、事件和运行输出。Codex 的 Windows 沙箱会给用户目录下的文件夹加上它的账号的读权限，数据目录也在内；中台启动时收回，在那之前沙箱里的命令能读到主密钥和配置里的密钥。插件另外给每轮的 `context.json` 加这个读权限。升级后同步重启中台与接单程序；新版 `status` 使用中台提供的费用汇总、最近事项和定时运行摘要。
 
 升级时若投影格式有变化，会自动从旧日志逐条重建，历史多时首次启动需要等待；之后正常启动直接复用投影。原日志和已有卡片链接保留，不需要手动迁移。
 
