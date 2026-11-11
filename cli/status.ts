@@ -245,5 +245,6 @@ export function render(state: any, { color, columns }: { color: boolean; columns
     const words = `${sourceName(event.source)} ${event.type} ${event.subject}`;
     say(`  ${yellow(words)}${event.summary ? dim(`：${event.summary}`) : ""}`);
   }
+  if (unrouted.length) say(dim("  收起已知事件：agent-autoloop status --clear-unrouted"));
   return out.join("\n");
 }

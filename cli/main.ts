@@ -40,9 +40,11 @@ const HELP = `Agent 自动化中台
   agent-autoloop why <第几轮> [--json]  查看时间线；--json 输出原始事实
   agent-autoloop conformance <地址> --config <测试凭据文件>
                                     在测试中台上检查协议
-  agent-autoloop status [--json]         现在什么情况：谁在线、等你什么、在做什么、做过什么、花了多少
+  agent-autoloop status [--json | --clear-unrouted]
+                                    现在什么情况：谁在线、等你什么、在做什么、做过什么、花了多少
                                      当前轮次完整列出，最近事项归并，定时运行汇总
                                      --json 输出 /v1/state 的原始结构，给脚本用
+                                     --clear-unrouted 收起目前没有规则接的旧事件，新事件照常显示
   agent-autoloop answer <卡片> [序号] [--text 别的想法]
                                     回答一张卡片；通知不用写序号
   agent-autoloop resolve <卡片> <结果>   这件事不用决定了，写一句结果
@@ -92,11 +94,12 @@ const TRY_USAGE = `用法：agent-autoloop try
 
 用本机接好的 Agent 跑一遍完整流程：提问，进程退出等你回复，你拍板，它接着干完。`;
 
-const STATUS_USAGE = `用法：agent-autoloop status [--json]
+const STATUS_USAGE = `用法：agent-autoloop status [--json | --clear-unrouted]
 
 现在什么情况：谁在线、等你什么、在做什么、做过什么、花了多少。
 当前轮次完整列出，最近事项按事项归并，正常定时运行每条规则汇总展示。
-  --json  输出 /v1/state 的原始结构，给脚本和看板用`;
+  --json  输出 /v1/state 的原始结构，给脚本和看板用
+  --clear-unrouted 收起目前没有规则接的旧事件，只改本机展示，新事件照常显示；不能和 --json 一起用`;
 
 const UPDATE_USAGE = `用法：agent-autoloop update
 
@@ -153,7 +156,7 @@ rules.json 里这个定时任务要写 cwd；你答了，中台叫醒它的 Agen
   rules: { flags: [], usage: "用法：agent-autoloop rules explain [文件]" },
   run: { flags: ["subject", "reason"], usage: "用法：agent-autoloop run <规则> [--subject 对象] [--reason 说明]" },
   service: { flags: [], usage: "用法：agent-autoloop service install|remove" },
-  status: { flags: ["json"], usage: STATUS_USAGE },
+  status: { flags: ["json", "clear-unrouted"], usage: STATUS_USAGE },
   stop: { flags: [], usage: "用法：agent-autoloop stop <第几轮>" },
   tell: { flags: ["task"], usage: "用法：agent-autoloop tell <编号> [--task 定时任务名]，内容从标准输入读" },
   try: { flags: [], usage: TRY_USAGE },
@@ -427,9 +430,24 @@ async function tryIt() {
 }
 
 async function status(named: Flags) {
-  const state = await ownerClient().state();
+  if (named.json !== undefined && named["clear-unrouted"] !== undefined) {
+    return fail("--json 和 --clear-unrouted 不能一起用");
+  }
+  const config = readConfig();
+  const state = await ownerClient(config).state();
   if (named.json !== undefined) return console.log(JSON.stringify(state, null, 2));
-  console.log(render(state, { color: colorFor(process.stdout, process.env), columns: process.stdout.columns }));
+  let through = config.status?.unroutedThrough ?? 0;
+  if (named["clear-unrouted"] !== undefined) {
+    const latest = Math.max(through, ...state.unrouted.map((event: { id: number }) => event.id));
+    if (latest > through) {
+      config.status = { ...config.status, unroutedThrough: latest };
+      writeConfig(config);
+      through = latest;
+    }
+    console.log("已收起已知的未接事件，新事件仍会显示。历史记录保留，可用 status --json 查看。\n");
+  }
+  const shown = { ...state, unrouted: state.unrouted.filter((event: { id: number }) => event.id > through) };
+  console.log(render(shown, { color: colorFor(process.stdout, process.env), columns: process.stdout.columns }));
 }
 
 async function answer(args: string[]) {

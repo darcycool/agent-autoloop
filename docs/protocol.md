@@ -364,6 +364,10 @@ POST /v1/rules/巡检/run        { "subject": "#12", "reason": "看一眼" }    
 
 ### 状态展示与摘要
 
+`agent-autoloop status --clear-unrouted` 收起已经知道的“没有规则接的事件”。它先读取当前状态，再将其中最新的未接事件编号存到本机 `config.json` 的 `status.unroutedThrough`；以后文字版只展示编号大于它的未接事件。收起的是截至该编号的全部旧事件，不只是终端当前显示的 5 条。新事件照常显示，重复发送的同一事件仍由原记录去重。
+
+这是本机的展示偏好，不改中台事实、事件、规则或任务，也不需要重启；其他电脑和客户端不受影响。`status --json` 仍原样输出 `/v1/state`，包括收起的旧事件；不能与 `--clear-unrouted` 一起用。要恢复显示旧事件，删除本机 `config.json` 的 `status.unroutedThrough`。已有配置不改也能继续使用，HTTP 和插件约定不变。
+
 `agent-autoloop status` 按“当前在做与异常”“最近处理的事项”“定时运行”展示。首页 `runs` 除最近 60 轮外还带上所有 `claimed`、`queued`、`unknown` 轮次，命令行把它们完整列出；失败等重试的轮次显示“等重派”、原因和下次重试时间，停止中的显示“正在停止”。`runs[].lane` 是实际的事项标识；没写 `parallel` 时是空字符串，不根据事件对象或标题另拆事项。
 
 首页 `recentMatters` 从完整历史筛选 `done`、`nothing`、`cancelled` 轮次，先排除当前定时规则中非手动运行的正常结果（`done`、`nothing`），再按 `(rule, lane)` 归并。每个事项保留完成时间最新的一轮，同一时间取编号较大的一轮；整体按完成时间、编号倒序取前 8 项，并带上轮次的展示摘要和 `lane`。因此高频定时任务不会挤掉其他事项。手动运行和中止结果仍可进入最近事项；`cancelled` 显示“停了”，有错误时附原因。

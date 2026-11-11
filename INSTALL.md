@@ -109,6 +109,8 @@ Claude 要委托 Codex 处理网页时，可用[浏览器交接模板](examples/
 
 要让“接单程序没连上”只在工作时间提醒，将 [工作时段示例](examples/worker-offline-hours.json) 的顶层字段合入中台的 `rules.json`，保留现有规则，运行 `agent-autoloop check`；不用改通道或重启。示例含中国 2026、2027 年假期和调休，后续年份需补齐。详情见[协议](docs/protocol.md#接单程序离线提醒的工作时段)。
 
+已知的“没有规则接的事件”可以用 `agent-autoloop status --clear-unrouted` 在本机收起，之后新事件照常显示。只改本机 `config.json` 的展示偏好，不必重启，历史仍能用 `status --json` 查看。
+
 ## 卸载
 
 卸载程序，默认保留规则、密钥和记录：

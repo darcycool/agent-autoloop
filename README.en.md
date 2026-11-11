@@ -63,6 +63,8 @@ In an interactive terminal, just type the option number. In a non-interactive te
 
 `status` lists all active rounds and rounds needing attention, then groups recent completed work by matter. Normal scheduled runs get one summary per rule, with the latest result, next run time, and today's normally completed rounds. A poll running every minute no longer crowds out other work; manual runs and stopped rounds remain visible separately. `status --json` retains raw rounds alongside the summaries. Use `agent-autoloop why <round>` for the full timeline.
 
+Run `agent-autoloop status --clear-unrouted` to hide unmatched events you already know about from this computer's text output. New events still appear. History stays in the hub, and `status --json` continues to show the raw state.
+
 ## Review daily activity
 
 Run `agent-autoloop overview` to start the independent local plugin and open your browser. The list shows business items active that day and items still pending at the cutoff; the adjacent details show receipts, attempts, retries, questions, answers, and source/session links. Filter by date, rule, status, or text. Today refreshes automatically; past dates retain their end-of-day state.
