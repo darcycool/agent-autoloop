@@ -2,6 +2,7 @@
 // run out. The shell keeps one timer, for the earliest of them, so nothing has to poll.
 import { rows, type Row, type View } from "./evolve.ts";
 import { configuration, waitingOn, workers } from "./query.ts";
+import { isOfflineNotice, offlineNoticeAt } from "./offline-hours.ts";
 
 export const MINUTE = 60_000;
 /** A worker seen this recently is really there, so a run it has stopped mentioning has really gone quiet. */
@@ -51,13 +52,25 @@ export function deadlines(view: View, now: number) {
     const notBefore = Date.parse(delivery.not_before);
     if (notBefore > now) add("delivery", `${delivery.card_id}:${delivery.channel}`, notBefore);
   }
+  const rules = configuration(view);
+  const opening = rules?.workerOffline ? offlineNoticeAt(now, rules) : now;
+  if (opening > now) {
+    for (const card of rows(view, "cards", { state: "open" }).filter((card) => isOfflineNotice(card.key))) {
+      const pending = Object.keys(rules.channels).some((channel) => {
+        const delivery = view.get("deliveries", `${card.id}:${channel}`);
+        return !delivery || (!delivery.given_up && delivery.version < card.version);
+      });
+      if (pending) add("offline-card", String(card.id), opening);
+    }
+  }
   for (const worker of workers(view)) {
     const seen = view.get("seen", `worker:${worker}`);
     const waiting = waitingOn(view, worker, now);
     if (!waiting.length) continue;
     // The sweep acts strictly after each limit, hence the extra millisecond.
     if (!offlineCard(view, worker, waiting).told) {
-      add("offline", worker, Math.max(now, Date.parse(seen?.seen_at ?? waiting[0].created_at) + OFFLINE_AFTER + 1));
+      const after = Math.max(now, Date.parse(seen?.seen_at ?? waiting[0].created_at) + OFFLINE_AFTER + 1);
+      add("offline", worker, offlineNoticeAt(after, configuration(view)));
     }
     if (!seen || now - Date.parse(seen.seen_at) > WORKER_FRESH) continue;
     for (const run of waiting.filter((run) => run.state === "claimed")) {

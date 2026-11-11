@@ -26,7 +26,14 @@ export type Elsewhere = RuleWords & {
   cwd?: string;
 };
 type Registered = { sources: Record<string, Source>; agents: Record<string, Agent>; channels: Record<string, Channel> };
-export type Rules = Registered & { timezone: string; askFirst: string[]; rules: Rule[]; elsewhere: Elsewhere[] };
+export type WorkerOffline = { start: string; end: string; daysOff?: string[]; daysOn?: string[] };
+export type Rules = Registered & {
+  timezone: string;
+  askFirst: string[];
+  rules: Rule[];
+  elsewhere: Elsewhere[];
+  workerOffline?: WorkerOffline;
+};
 
 /** The source of what the clock makes happen. */
 export const SCHEDULE = "schedule";

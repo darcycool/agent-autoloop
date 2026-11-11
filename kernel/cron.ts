@@ -42,7 +42,7 @@ export function parseCron(text: string) {
 export type Cron = NonNullable<ReturnType<typeof parseCron>>;
 const formats = new Map<string, Intl.DateTimeFormat>();
 
-function wallClock(ms: number, zone: string) {
+export function wallClock(ms: number, zone: string) {
   let format = formats.get(zone);
   if (!format) {
     const fields = { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" } as const;

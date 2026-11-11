@@ -112,6 +112,8 @@ Agent 结束了这一轮，问了你一个问题。它现在不占进程、不�
 
 `agent-autoloop pause <规则>`、`resume <规则>` 暂停和恢复一条规则，暂停期间到点不跑、来事件不接，恢复后不补跑；`agent-autoloop run <规则>` 立即跑一轮。这些记在中台的日志里，不改 `rules.json`。
 
+不想在休息时收到“接单程序没连上”？在规则顶层配置 [`workerOffline`](docs/protocol.md#接单程序离线提醒的工作时段)，只在工作日 09:00–19:00 提醒，支持法定假期和调休上班日。[示例](examples/worker-offline-hours.json)带中国 2026、2027 年日历，后续年份需更新；其他卡片照常发送，不配置时仍全天提醒。
+
 保存后几秒内自动生效，可以运行 `agent-autoloop check` 检查，`agent-autoloop check <文件>` 检查一份草稿，不碰正在跑的中台；`agent-autoloop rules explain [文件]` 看生效的规则和下次定时（也可以指定一份草稿），`agent-autoloop emit <类型> --dry-run` 预演一条事件会派给谁（不连接中台、不写日志）。就算改错了，或者文件被删、读不到，系统也会继续按旧规则跑，并发卡片提醒你。
 
 ### Agent 怎么跟中台配合？

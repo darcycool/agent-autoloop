@@ -94,6 +94,8 @@ Claude 主任务要委托 Codex 操作网页时，从 `examples/recipes/browser-
 
 配置在两处：`rules.json` 的 `channels` 登记（`answerers` 是谁能回答，没写时通道里谁都能回答，`doctor` 会提醒），`config.json` 的 `channels` 写密钥和选项。`agent-autoloop key new channel <名字>` 拿密钥（先问用户）。改了 `config.json` 要 `agent-autoloop service install` 重启。默认每张卡片发到所有通道；某条规则的卡片只想发到某几个通道，在这条规则里写 `"channels": ["feishu"]`。
 
+**休息时不提醒接单电脑离线**：把 [工作时段示例](../../examples/worker-offline-hours.json) 的顶层 `timezone`、`workerOffline` 合入中台的 `rules.json`，保留其他字段，再运行 `agent-autoloop check`，自动重载。示例按北京时间 09:00（含）到 19:00（不含），含中国 2026、2027 年法定假期和调休上班日；后续年份按国务院通知追加 `daysOff`、`daysOn`。只限制“接单程序没连上”，到下个工作时段仍离线才提醒，其他卡片照常。字段和兼容约定见[协议](../../docs/protocol.md#接单程序离线提醒的工作时段)。
+
 **桌面通知**：新装的中台默认开着（`plugins/desktop/channel.ts`），两处各有一个 `desktop`。卡片第一次发送时，macOS 用 `osascript`、Linux 用 `notify-send`、Windows 用 PowerShell 系统托盘通知弹一条通知，标题为“Agent 问你一个问题”，正文是卡片标题和“运行 agent-autoloop status 查看”，不能在通知上回答。没有图形会话时安静跳过，问题仍在；通知命令失败时报告失败，不会让中台退出。接了别的通道可以留着它；不想要就把两处的 `desktop` 都删掉，再重启。以前装的中台不会自动加上它。
 
 **飞书**：用官方的 `lark-cli`。`npm i -g @larksuite/cli`，`lark-cli config init --new` 建一个应用（用户扫码），在开发者后台给应用开机器人能力，并订阅卡片回传交互（长连接）。然后：

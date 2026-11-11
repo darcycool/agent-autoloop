@@ -4,6 +4,7 @@ import { credential, digest, type Environment } from "./credentials.ts";
 import { latestBefore, nextRun, parseCron } from "./cron.ts";
 import { deadlines, MINUTE, offlineCard, OFFLINE_AFTER, RUN_LEASE, SEEN_EVERY, WORKER_FRESH } from "./due.ts";
 import { AuthError, Conflict, InputError, NotFound } from "./errors.ts";
+import { isOfflineNotice, offlineNoticeAt } from "./offline-hours.ts";
 import { iso, rows, type Change, type Fact, type Row, type Table, type View } from "./evolve.ts";
 import {
   agentsOf,
@@ -291,7 +292,7 @@ function sweep(draft: Draft) {
     if (!waiting.length) continue;
     const since = now - (lastSeen ?? Date.parse(waiting[0].created_at));
     const { key, told } = offlineCard(draft.view, worker, waiting);
-    if (since <= OFFLINE_AFTER || told) continue;
+    if (since <= OFFLINE_AFTER || told || offlineNoticeAt(now, draft.rules) > now) continue;
     const minutes = Math.floor(since / MINUTE);
     const neverSeen = lastSeen === undefined;
     const situation = neverSeen
@@ -523,6 +524,7 @@ function nextCard(draft: Draft, channel: string) {
     const worthSending = card.state === "open" || delivery.ref !== null || recentNote;
     const resting = delivery.not_before && Date.parse(delivery.not_before) > now;
     if (card.quiet || delivery.version >= card.version || delivery.given_up || resting || !worthSending) continue;
+    if (card.state === "open" && isOfflineNotice(card.key) && offlineNoticeAt(now, draft.rules) > now) continue;
     const firstTry = delivery.first_try_at;
     if (delivery.tries >= RESEND_AT.length || (firstTry && now - Date.parse(firstTry) > RESEND_WINDOW)) {
       put(draft, "deliveries", key, { given_up: 1 });

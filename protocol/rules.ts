@@ -32,6 +32,14 @@ const isId: Check = (value) => typeof value === "string" && ID.test(value);
 const isCount: Check = (value) => Number.isInteger(value) && (value as number) > 0;
 const isTypes: Check = (value) => isSomeWords(value) && (value as string[]).every((type) => TYPE_PATTERN.test(type));
 const isCron: Check = (value) => typeof value === "string" && parseCron(value) !== null;
+const isTime: Check = (value) => typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+const isDates: Check = (value) =>
+  Array.isArray(value) &&
+  value.every((day) => {
+    if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+    const at = Date.parse(`${day}T00:00:00Z`);
+    return Number.isFinite(at) && new Date(at).toISOString().slice(0, 10) === day;
+  });
 const isFolder: Check = (value) =>
   typeof value === "string" && /^(~[/\\]|\/|[a-z]:[/\\]|\\\\[^\\]+\\[^\\]+)/i.test(value);
 const FOLDER = "要是绝对目录（如 ~/code、/srv/app、C:\\code 或 \\\\服务器\\共享目录）";
@@ -124,6 +132,7 @@ export function parseRules(json: string, now: number, timezone: string): Rules {
   const issues: string[] = [];
   checkFields(issues, "rules.json ", parsed, [
     ["timezone", isZone, "不是有效的时区", true],
+    ["workerOffline", isObject, "要是一个对象", true],
     ["askFirst", isWords, "要是文字的列表", true],
     ["sources", isObject, "要是一个对象"],
     ["agents", isObject, "要是一个对象"],
@@ -137,6 +146,21 @@ export function parseRules(json: string, now: number, timezone: string): Rules {
   rules.askFirst ??= ASK_FIRST;
   rules.channels ??= {};
   rules.elsewhere ??= [];
+  if (rules.workerOffline) {
+    const hours = rules.workerOffline;
+    checkFields(issues, "workerOffline ", hours, [
+      ["start", isTime, "要写成 HH:mm（00:00 到 23:59）"],
+      ["end", isTime, "要写成 HH:mm（00:00 到 23:59）"],
+      ["daysOff", isDates, "要是真实日期 YYYY-MM-DD 的列表", true],
+      ["daysOn", isDates, "要是真实日期 YYYY-MM-DD 的列表", true],
+    ]);
+    if (isTime(hours.start) && isTime(hours.end) && hours.start >= hours.end) {
+      issues.push("workerOffline 的 end 要晚于 start，不跨天");
+    }
+    if (isDates(hours.daysOff) && isDates(hours.daysOn) && hours.daysOn!.some((day) => hours.daysOff!.includes(day))) {
+      issues.push("workerOffline 的同一天不能既在 daysOff 又在 daysOn");
+    }
+  }
   if (SCHEDULE in rules.sources) issues.push(`来源 ${SCHEDULE} 是保留的，定时用规则的 cron`);
   for (const [id, source] of Object.entries(rules.sources)) {
     if (!ID.test(id)) issues.push(`来源的编号${ID_WORDS}：${id}`);

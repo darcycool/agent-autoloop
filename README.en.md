@@ -114,6 +114,8 @@ External events work the same way once the source is connected. To hand new GitH
 
 `agent-autoloop pause <rule>` and `resume <rule>` pause and resume one rule: while paused it skips its scheduled times and doesn't take events, and a resume doesn't catch up on what was skipped. `agent-autoloop run <rule>` runs it once now. These are kept in the hub's log; `rules.json` is not changed.
 
+To receive worker-offline notices only during working hours, add [`workerOffline`](docs/protocol.md#接单程序离线提醒的工作时段) at the top of your rules. It supports weekdays, holiday dates and makeup workdays. The [example](examples/worker-offline-hours.json) uses 09:00–19:00 in Asia/Shanghai with China's 2026 and 2027 calendars; later years need updating. Other cards are unaffected. Without this setting, offline notices remain enabled at all hours.
+
 Changes take effect within seconds of saving. Run `agent-autoloop check` to validate, `agent-autoloop check <file>` to validate a draft without touching the running hub, `agent-autoloop rules explain [file]` to see the rules in effect and their next runs (a draft file too), and `agent-autoloop emit <type> --dry-run` to preview who an event would go to (it doesn't contact the hub or write to the log). If you make a mistake, or the file is deleted or can't be read, the hub keeps running the previous valid rules and sends you a card about it.
 
 ### How agents talk back to the hub
