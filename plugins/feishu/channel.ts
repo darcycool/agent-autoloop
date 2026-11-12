@@ -47,36 +47,39 @@ export function render(card: Card) {
     card.kind === "notice" && card.answer
       ? [{ tag: "div", text: { tag: "plain_text", content: `处理说明：${card.answer}` } }]
       : [];
-  const form = {
-    tag: "form",
-    name: notice ? "handling_note" : "free_answer",
-    elements: [
-      {
-        tag: "input",
-        name: notice ? "note" : "text",
-        input_type: "multiline_text",
-        rows: notice ? 2 : 3,
-        auto_resize: true,
-        required: !notice,
-        max_length: 1000,
-        label: { tag: "plain_text", content: notice ? "处理说明（可不填）" : "说说我的想法" },
-        label_position: "top",
-        placeholder: {
-          tag: "plain_text",
-          content: notice
-            ? "比如：已回复他视频下周发；或：群发广告，不用管"
-            : "比如：两个都不选，先别执行。我想先讨论有没有成本更低的方案。",
+  // Both forms submit `note`; an ask uses it as the answer, a notice records it when closing the card.
+  const textForm = [
+    {
+      tag: "form",
+      name: notice ? "handling_note" : `ask_text_${card.id}`,
+      elements: [
+        {
+          tag: "input",
+          name: "note",
+          input_type: "multiline_text",
+          rows: 2,
+          auto_resize: true,
+          required: !notice,
+          max_length: 1000,
+          label: { tag: "plain_text", content: notice ? "处理说明（可不填）" : "选项都不合适，就直接写回答" },
+          label_position: "top",
+          placeholder: {
+            tag: "plain_text",
+            content: notice
+              ? "比如：已回复他视频下周发；或：群发广告，不用管"
+              : "写好点“提交文字”；写了再点选项，文字不会带上",
+          },
         },
-      },
-      {
-        tag: "button",
-        name: `${notice ? "handling_note" : "free_answer"}_submit_${card.id}`,
-        form_action_type: "submit",
-        type: "primary",
-        text: { tag: "plain_text", content: notice ? "记录并结案" : "发送给 Agent" },
-      },
-    ],
-  };
+        {
+          tag: "button",
+          name: notice ? `handling_note_submit_${card.id}` : `ask_text_submit_${card.id}`,
+          form_action_type: "submit",
+          type: notice ? "primary" : "default",
+          text: { tag: "plain_text", content: notice ? "记录并结案" : "提交文字" },
+        },
+      ],
+    },
+  ];
   return {
     schema: "2.0",
     config: { update_multi: true, enable_forward: false },
@@ -88,9 +91,7 @@ export function render(card: Card) {
       elements: [
         ...(card.text ? [{ tag: "markdown", content: card.text }] : []),
         ...(card.state === "open"
-          ? notice
-            ? [form, ...card.options.map(option)]
-            : [...card.options.map(option), form]
+          ? [...(notice ? textForm : []), ...card.options.map(option), ...(notice ? [] : textForm)]
           : [...afterwards, ...noteSaid]),
       ],
     },
@@ -99,14 +100,14 @@ export function render(card: Card) {
 
 export default async function feishu({ hub, options, log, signal }: ChannelContext) {
   const program = (options.lark as string | undefined) ?? "lark-cli";
-  const lark = async (args: string[], input: string) => {
+  const lark = async (args: string[], input?: string) => {
     const printed = await new Promise<string>((resolve, reject) => {
       const child = execFile(
         ...commandLine([program, ...args]),
         { encoding: "utf8", timeout: 60_000, signal },
         (error, stdout) => (error ? reject(error) : resolve(stdout)),
       );
-      child.stdin!.on("error", reject);
+      child.stdin!.on("error", input === undefined ? () => {} : reject);
       child.stdin!.end(input);
     });
     const out = JSON.parse(printed);
@@ -125,8 +126,7 @@ export default async function feishu({ hub, options, log, signal }: ChannelConte
   async function sendMessage(key: string, content: string) {
     const target = ["--user-id", owner, "--as", "bot", "--msg-type", "interactive"];
     const once = ["--idempotency-key", key];
-    return (await lark(["im", "+messages-send", ...target, ...once, "--content", "-"], content)).data
-      .message_id as string;
+    return (await lark(["im", "+messages-send", ...target, ...once, "--content", content])).data.message_id as string;
   }
 
   async function deliver() {
@@ -171,16 +171,18 @@ export default async function feishu({ hub, options, log, signal }: ChannelConte
     const form = safeJson(event.form_value);
     const value = safeJson(event.action_value);
     // A form's submit button can't carry a value, so its name holds the card's number.
-    const named = /^(handling_note|free_answer)_submit_(\d+)$/.exec(String(event.action_name ?? ""));
+    // Cards already sent by either branch retain their original field and button names.
+    const named = /^(handling_note|free_answer|ask_text)_submit_(\d+)$/.exec(String(event.action_name ?? ""));
     const cardId = named ? Number(named[2]) : Number.isInteger(value?.card) ? value.card : null;
     if (!Number.isInteger(cardId)) return;
     const given: { choice?: number; by?: string; ref?: string; text?: string } = {
       by: event.operator_id,
       ref: event.message_id,
     };
-    if (named?.[1] === "free_answer") {
-      if (typeof form?.text !== "string" || !form.text.trim()) return;
-      given.text = form.text;
+    if (named?.[1] === "free_answer" || named?.[1] === "ask_text") {
+      const text = named[1] === "free_answer" ? form?.text : form?.note;
+      if (typeof text !== "string" || !text.trim()) return;
+      given.text = text;
     } else if (named?.[1] === "handling_note") {
       // A notice's only option is that it's been handled; a question's free answer must never pick that option.
       given.choice = 0;

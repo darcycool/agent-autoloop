@@ -81,7 +81,7 @@ The numbers match the diagram above:
 4. **Asks only when needed.** For sensitive actions like deleting data, restarting a service, spending money, or messaging people, the kernel sends you a card through Feishu or a desktop notification. While you take your time, no agent process runs and no tokens are spent.
 5. **One tap resumes it.** Your answer picks up the original conversation and finishes the job.
 
-If neither option fits, use the free-answer field below the options on the Feishu card and press “发送给 Agent” (Send to Agent). You can say “Neither; don't execute yet. Let's discuss a cheaper approach.” If another decision is needed, the agent sends a new card. Card links also accept free text, as does `agent-autoloop answer <card-id> --text "your thoughts"`. Each card accepts one answer; ordinary Feishu chat messages are not forwarded to the agent.
+If neither option fits, use the free-answer field below the options on the Feishu card and press “提交文字” (Submit text). You can say “Neither; don't execute yet. Let's discuss a cheaper approach.” If another decision is needed, the agent sends a new card. Card links also accept free text, as does `agent-autoloop answer <card-id> --text "your thoughts"`. Each card accepts one answer; ordinary Feishu chat messages are not forwarded to the agent.
 
 Anything the agent can handle alone takes the auto-loop at the top of the diagram: finish outright, or schedule a follow-up check (say, in 30 minutes) without bothering you.
 
@@ -114,7 +114,7 @@ External events work the same way once the source is connected. To hand new GitH
 }
 ```
 
-`agent-autoloop pause <rule>` and `resume <rule>` pause and resume one rule: while paused it skips its scheduled times and doesn't take events, and a resume doesn't catch up on what was skipped. `agent-autoloop run <rule>` runs it once now. These are kept in the hub's log; `rules.json` is not changed.
+`agent-autoloop pause <rule>` and `resume <rule>` pause and resume one rule: while paused it skips its scheduled times and doesn't take or queue events, and a resume doesn't catch up on its own. A resume lists the events the pause skipped and prints `agent-autoloop replay <rule> --since <time>`, which hands them all to the rule at once, each only once. `agent-autoloop run <rule>` runs it once now. These are kept in the hub's log; `rules.json` is not changed. `agent-autoloop runs [rule]` lists finished rounds, `--before <round>` pages back, and `agent-autoloop why <round>` tells the full story of one.
 
 To receive worker-offline notices only during working hours, add [`workerOffline`](docs/protocol.md#接单程序离线提醒的工作时段) at the top of your rules. It supports weekdays, holiday dates and makeup workdays. The [example](examples/worker-offline-hours.json) uses 09:00–19:00 in Asia/Shanghai with China's 2026 and 2027 calendars; later years need updating. Other cards are unaffected. Without this setting, offline notices remain enabled at all hours.
 
@@ -143,7 +143,7 @@ Besides `ask`, receipts can send notifications (`notice`), resolve open cards (`
 
 ## Ready-to-use recipes
 
-Each recipe includes rules, handling instructions, and setup instructions (written in Chinese).
+Each recipe includes sample rules and setup instructions (written in Chinese).
 
 | Task | Included workflow |
 |---|---|
@@ -157,11 +157,11 @@ Each recipe includes rules, handling instructions, and setup instructions (writt
 | [Inbox triage](examples/recipes/inbox-triage/README.md) | Read unread mail from the last 24 hours at 8 AM by default; write a local checklist with reply drafts, without sending or changing the mailbox |
 | [PR delivery](skills/agent-autoloop/SKILL.md#交付流水线) | Add `deliver` to a PR to review it, wait for CI, merge, wait for deployment, and verify the live version |
 
-**To enable one:** open its instructions, put the task Skill in your agent's skills directory, merge the sample rules into `~/.agent-autoloop/rules.json`, replace worker names and paths, then run `agent-autoloop check`.
+**To enable one:** open its instructions. If the recipe includes a task Skill, put it in your agent's skills directory. Merge the sample rules into `~/.agent-autoloop/rules.json`, replace worker names and paths, then run `agent-autoloop check`.
 
 Feedback, website watch, Feishu briefs, and inbox triage default to Asia/Shanghai and send only to the owner's private Feishu chat. Sample data is fictional; scripts and receipts have been verified only with local HTTP and a fake Feishu CLI, not run end to end on a live account.
 
-More: [Claude-to-Codex browser handoff](examples/recipes/browser-handoff/README.md), [weekly code cleanup](examples/skills/weekly-sweep/SKILL.md), [ship a PR](examples/skills/ship-pr/SKILL.md).
+More: [Claude-to-Codex browser handoff](examples/recipes/browser-handoff/README.md) and [weekly code cleanup](examples/skills/weekly-sweep/SKILL.md).
 
 ## Plugin ecosystem: swap any of the four sides
 
@@ -170,11 +170,11 @@ Built-in plugins ship with the program and are enabled through configuration. Us
 | Side | Built in | Setup |
 |---|---|---|
 | **Events**: how work is found | [GitHub Webhook](plugins/github/source.ts), [GitLab Webhook](plugins/gitlab/source.ts), [HTTP API](docs/protocol.md#来源把世界变成事件), [cron rules](skills/agent-autoloop/SKILL.md#改规则), [issue polling script](examples/watch-github-issues.sh) | [Guide](skills/agent-autoloop/SKILL.md#接一个事件插件) |
-| **Agents**: who does the work | [Claude Code](plugins/claude/agent.ts), [Codex](plugins/codex/agent.ts), [ACP](plugins/acp/agent.ts), [DeepSeek Harness](plugins/dsh/agent.ts), [generic command](plugins/command/agent.ts) | [Guide](skills/agent-autoloop/SKILL.md#接一个-agent) |
+| **Agents**: who does the work | [Claude Code](plugins/claude/agent.ts), [Codex](plugins/codex/agent.ts), [ACP](plugins/acp/agent.ts), [DeepSeek Harness](plugins/dsh/agent.ts), [ZCode](plugins/zcode/agent.ts), [generic command](plugins/command/agent.ts) | [Guide](skills/agent-autoloop/SKILL.md#接一个-agent) |
 | **Channels**: how cards reach you | [Desktop notifications](plugins/desktop/channel.ts) (on by default), [Feishu](plugins/feishu/channel.ts), [DingTalk / WeCom / Slack / Discord](plugins/webhook/templates.ts) | [Guide](skills/agent-autoloop/SKILL.md#接一个通道) |
 | **Delivery**: CI/CD as a plugin | [`delivery`](plugins/delivery/delivery.ts) | [Guide](skills/agent-autoloop/SKILL.md#交付流水线) |
 
-**What has been tested:** Claude Code, Codex, and ACP (with the official Codex ACP adapter) have run multi-turn Q&A and session resumption across processes. Feishu has run real delivery, button callbacks, and card updates; the new free-answer form for questions has only been verified with a fake CLI. The four webhook templates have only been checked against local mock servers, and the GitLab webhook against the payloads in its docs, not a real GitLab. These text channels answer through a link, so `hub.publicUrl` must be reachable from your phone or computer.
+**What has been tested:** Claude Code, Codex, and ACP (with the official Codex ACP adapter) have run multi-turn Q&A and session resumption across processes. ZCode has run a question, an answer, and the resumed session. Feishu has run real delivery, button callbacks, and card updates; the new free-answer form for questions has only been verified with a fake CLI. The four webhook templates have only been checked against local mock servers, and the GitLab webhook against the payloads in its docs, not a real GitLab. These text channels answer through a link, so `hub.publicUrl` must be reachable from your phone or computer.
 
 **Built-in agents through another service.** To send Claude Code or Codex to a third-party model service, or to set environment variables before it starts, write a small script that sets them and starts the program, then put `"program": "/path/to/script"` on the agent. Session resumption and usage reporting still work. See the [guide](skills/agent-autoloop/SKILL.md#接一个-agent).
 
@@ -193,13 +193,13 @@ OpenClaw's `agent exec` stops each run after 600 seconds by default, and that co
 
 Agents that speak ACP connect with `use: "acp"` and can go on in the same session: [Gemini CLI](https://geminicli.com/docs/cli/acp-mode/) is `"command": ["gemini", "--acp"]`, and [OpenCode](https://opencode.ai/docs/acp) is `"command": ["opencode", "acp"]`. Both answered the ACP handshake (Gemini CLI 0.67.0, OpenCode 1.1.2); multi-turn Q&A and session resumption have not been run yet.
 
-**Delivery pipeline.** Add the `deliver` label to a GitHub PR and it follows through to release: **review → wait for CI → merge → wait for deploy → verify the live version**. Settings are read only from `main`, and PR code is never checked out or run on the worker machine. Queueing, concurrency, and retries come from the kernel.
+**Delivery pipeline.** Once delivery rules are configured, the `deliver` label takes a GitHub PR through review, CI, merge, deployment, and live-version verification. Projects can choose reviewers per authoring agent or share a policy. Delivery reads trusted settings from main and reviews a read-only snapshot on the worker.
 
 **Write your own.** Start from the runnable [agent](examples/plugins/hello-agent/agent.ts), [channel](examples/plugins/hello-channel/channel.ts), and [event](examples/plugins/hello-source/source.ts) templates and the [plugin guide](docs/plugins.md). For web tasks, read [browser access](docs/plugins.md#浏览器接入) first. The CLI and [MCP](skills/agent-autoloop/SKILL.md#mcp-与密钥撤销) can also inspect and answer cards.
 
 ## Four kernel mechanisms
 
-The kernel is about 1,850 lines with zero runtime dependencies. It reads no clock, uses no randomness, and makes no outbound requests; plugins connect in, and credentials stay with the plugins that use them. Identical inputs always give identical results. It brings four proven systems patterns to command-line agents:
+The kernel has zero runtime dependencies. It reads no clock, uses no randomness, and makes no outbound requests; plugins connect in, and credentials stay with the plugins that use them. Identical inputs always give identical results. It brings four proven systems patterns to command-line agents:
 
 - **Zero-cost wait**: The process exits while waiting for your call, and the waiting state lives in SQLite, so the agent does not stay alive. If you reply three days later, no agent process runs and no tokens are spent in the meantime — only the lightweight hub waits in the background; your answer resumes the original conversation.
 - **Event sourcing**: All state is derived from an append-only fact log, committed in the same SQLite transaction as its indexes before the hub replies. Confirmed facts survive `SIGKILL` (whole-machine power loss is not separately tested), every run can be traced with a single command, and format changes rebuild from the log without migration scripts.
@@ -240,7 +240,6 @@ Apple M5 Pro, 24 GB, Node 24.21.0. Each write is a separate request, acknowledge
 | Dispatch p99 | 1.82 ms |
 | Held-back heartbeat p99 with 5,000 queued | 1.66 ms |
 | Startup at 1.1 million facts | 99.8 ms |
-| Kernel lines (with comments and blanks) | about 1,850 |
 | Runtime dependencies | 0 |
 
 As history grows, the status summary slows down and the log and indexes keep using disk. The first start after a format change rebuilds from the log, which took 43.1 seconds for 1.1 million facts. [Full numbers and method](docs/protocol.md#历史增长实测) (in Chinese).

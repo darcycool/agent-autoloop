@@ -9,11 +9,14 @@
 // turn that won't exit; the raw messages of a broken Claude run become the reason it failed. A receipt an Agent wrote
 // and then lost because a background task called it back for another turn is dropped, so the card it asked for never
 // exists and the work looks untouched; or, carried along, it replaces one the last turn wrote wrongly, so a cancelled
-// review comes back. A line of output that's JSON
+// review comes back. Claude's tokens leave out what it read from its cache while the others' count it, so the same
+// work reads as a fraction of Codex's. A line of output that's JSON
 // but no message, like `null`, stops a plugin reading anything. A command line's placeholder pass rewrites the prompt
 // itself — a `{cwd}` or a `$&` the person wrote arrives as the folder or as `{prompt}` — so the program is asked
 // something other than what the event said. A built-in agent starts the program it finds, not the one its rules name,
-// so a wrapper that sends Claude Code to another service is never run.
+// so a wrapper that sends Claude Code to another service is never run. A service tier the rules name for Codex never
+// reaches its command line, so the run takes whatever tier the machine's own Codex config has that day. A program
+// missing for a moment, as while an update reinstalls it, stays missing until the worker restarts.
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,6 +39,7 @@ const claude: Adapter = (await import("../plugins/claude/agent.ts")).default;
 const codex: Adapter = (await import("../plugins/codex/agent.ts")).default;
 const command: Adapter = (await import("../plugins/command/agent.ts")).default;
 const dsh: Adapter = (await import("../plugins/dsh/agent.ts")).default;
+const zcode: Adapter = (await import("../plugins/zcode/agent.ts")).default;
 
 const turn = {
   prompt: "做这件事",
@@ -61,7 +65,7 @@ const stubbed = (adapter: Adapter, t: object) => {
 };
 
 test("a built-in agent starts the program its rules name, with its own arguments after it", () => {
-  for (const adapter of [claude, codex, dsh]) {
+  for (const adapter of [claude, codex, dsh, zcode]) {
     const argv = adapter.command({ ...turn, program: "/opt/bin/via-gateway" });
     assert.equal(argv[0], "/opt/bin/via-gateway");
     assert.ok(argv.includes("做这件事") || argv.some((part) => part.includes("做这件事")), "the prompt still goes in");
@@ -101,7 +105,7 @@ test("Claude Code: reading its result", () => {
   assert.deepEqual(claude.read(`noise\n${line({})}\n`, 0, ""), {
     text: "好了",
     session: "s",
-    usage: { input: 10, output: 2, cached: 6 },
+    usage: { input: 16, output: 2, cached: 5 },
     sessionUsage: { cost: 0.5 },
     finished: true,
   });
@@ -269,12 +273,15 @@ test("Codex: access, new and going on", { skip: !stubbed(codex, {}) }, () => {
   assert.ok(argv.includes('approval_policy="never"'));
   assert.ok(stubbed(codex, { access: "read" })!.includes('sandbox_mode="read-only"'));
   assert.ok(stubbed(codex, { access: "full" })!.includes('sandbox_mode="danger-full-access"'));
-  const again = stubbed(codex, { resume: "thread-1", model: "m", effort: "xhigh" })!;
+  const again = stubbed(codex, { resume: "thread-1", model: "m", effort: "xhigh", tier: "priority" })!;
   assert.deepEqual(again.slice(1, 3), ["exec", "resume"]);
   assert.equal(again.at(-2), "thread-1");
   assert.equal(again.at(-1), argv.at(-1));
   assert.ok(has(again, "-m", "m"));
   assert.ok(again.includes('model_reasoning_effort="xhigh"'));
+  assert.ok(again.includes('service_tier="priority"'));
+  assert.ok(stubbed(codex, { tier: "priority" })!.includes('service_tier="priority"'), "a new run gets it too");
+  assert.ok(!argv.some((part) => part.startsWith("service_tier")), "left to Codex's own config unless the rules say");
 });
 
 test("Codex: new and resumed runs use only browser access configured for the background task", () => {
@@ -385,9 +392,19 @@ test("a program that isn't there says so", () => {
   assert.throws(() => findProgram("surely-not-installed-anywhere"), /找不到 surely-not-installed-anywhere/);
 });
 
+test("a program missing at one lookup is found at the next once it's back", () => {
+  const program = join(setup("adapters-reinstall"), "reinstalled-agent");
+  assert.throws(() => findProgram("reinstalled-agent", () => [program]), /找不到 reinstalled-agent/);
+  writeFileSync(program, "", { mode: 0o755 });
+  assert.equal(
+    findProgram("reinstalled-agent", () => [program]),
+    program,
+  );
+});
+
 test("a line of output that's JSON but no message is noise to every plugin", () => {
   const noise = 'null\n42\n"words"\n[]\n';
-  for (const adapter of [claude, codex, command, dsh]) {
+  for (const adapter of [claude, codex, command, dsh, zcode]) {
     assert.doesNotThrow(() => adapter.read(noise, null, ""));
     assert.doesNotThrow(() => adapter.read(noise, 0, ""));
   }

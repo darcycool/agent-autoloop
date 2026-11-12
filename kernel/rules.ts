@@ -2,15 +2,29 @@
 // here, in protocol/rules.ts.
 export type Access = "read" | "edit" | "full";
 export type Source = { name: string; adapter?: string };
-type AgentOptions = { model?: string; effort?: string; command?: string[]; program?: string; timeout?: number };
-export type Agent = AgentOptions & { name: string; worker: string; use: string; access: Access };
+type AgentOptions = {
+  model?: string;
+  effort?: string;
+  tier?: string;
+  command?: string[];
+  program?: string;
+  timeout?: number;
+};
+export type Agent = AgentOptions & { name: string; worker: string; use: string; access: Access; maxActive?: number };
 export type Channel = { name: string; answerers?: string[]; links?: boolean };
 export type Tell = "always" | "needed" | "never";
 type EventFilter = { source: string; types: string[] };
 type When = EventFilter | { cron: string };
 type RuleWords = { skill?: string; prompt?: string };
-type RuleOptions = RuleWords & { parallel?: number; resume?: boolean; emits?: EventFilter };
-/** Without channels a rule's cards reach every channel; with them, only those. */
+/** A session's name for clients that take it from the first line: {subject} and {id} filled in by the worker. */
+type RuleOptions = RuleWords & {
+  title?: string;
+  parallel?: number;
+  maxActive?: number;
+  resume?: boolean;
+  emits?: EventFilter;
+};
+/** Without channels a rule's cards reach the default ones, or every channel if there are none; with them, only those. */
 type Reach = { channels?: string[] };
 /** Without parallel a rule's group runs one at a time; with it, each subject is its own thread, that many at once. */
 export type Rule = RuleOptions &
@@ -30,6 +44,8 @@ export type WorkerOffline = { start: string; end: string; daysOff?: string[]; da
 export type Rules = Registered & {
   timezone: string;
   askFirst: string[];
+  /** Where a card that names no channels of its own goes: a tell, the hub's own alerts, a rule without a list. */
+  defaultChannels?: string[];
   rules: Rule[];
   elsewhere: Elsewhere[];
   workerOffline?: WorkerOffline;

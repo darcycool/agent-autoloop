@@ -53,7 +53,7 @@ GitHub Issue 轮询和 PR 交付等功能另需已登录的 `gh`，按对应场�
 AGENT_AUTOLOOP_REPO=/path/to/agent-autoloop sh /path/to/agent-autoloop/install.sh --agent codex
 ```
 
-`--agent claude` 选择 Claude Code；只有其他 CLI 时加 `--command 'hermes chat -Q -q {prompt}'`。不指定时会检测本机安装的 Agent，第一种作为试跑对象。
+`--agent claude` 选择 Claude Code；只有其他 CLI 时加 `--command 'hermes chat -Q -q {prompt}'`，带空格的路径用引号括起来；找不到这个程序时不装。不指定时会检测本机安装的 Agent，第一种作为试跑对象。
 
 程序装进 `~/.agent-autoloop/app`，配置和记录留在 `~/.agent-autoloop`。默认打开桌面通知；没有图形会话时安静跳过，问题仍能用 `agent-autoloop status` 查看。macOS/Linux 的命令优先放在 PATH 中的 `~/.local/bin`，否则选 PATH 里第一个可写目录，不用 sudo、不覆盖其他程序；没有位置时使用安装器打印的完整路径。
 
@@ -89,7 +89,7 @@ agent-autoloop try
 
 `try` 会使用用户的模型额度。在非交互终端，它打印问题和 `agent-autoloop answer` 命令后退出；这是正常等待，不是失败。把问题转给用户，按他的选择回答，再运行 `agent-autoloop status`，看到“试跑通过”才算接通。仅为安装验证时，可以选择第二项绿色完成试跑。
 
-用户不接受现有选项时，用 `agent-autoloop answer <卡片编号> --text "用户的想法"`；也可在飞书提问卡片的“说说我的想法”里输入，再点“发送给 Agent”。文字回答同样唤醒原事项，尽量接续原会话；需要继续确认就再发一张卡片。每张卡片只答一次，飞书普通私聊文字不会被转交。
+用户不接受现有选项时，用 `agent-autoloop answer <卡片编号> --text "用户的想法"`；也可在飞书提问卡片的“选项都不合适，就直接写回答”里输入，再点“提交文字”。文字回答同样唤醒原事项，尽量接续原会话；需要继续确认就再发一张卡片。每张卡片只答一次，飞书普通私聊文字不会被转交。
 
 Claude 要委托 Codex 处理网页时，可用[浏览器交接模板](examples/recipes/browser-handoff/README.md)，先配置现成入口，再验收首次调用与原会话续办。模板不安装浏览器驱动、不自动放宽 Claude 命令权限。
 
@@ -125,7 +125,8 @@ agent-autoloop uninstall
 
 ## 文档
 
-- [配置手册](skills/agent-autoloop/SKILL.md)：接事件插件、通道、多台电脑和交付流水线。
+- [配置手册](skills/agent-autoloop/SKILL.md)：接事件插件、通道和多台电脑。
+- [交付流水线](skills/agent-autoloop/SKILL.md#交付流水线)随安装提供，按仓库配置交付规则后开始接单。
 - [协议](docs/protocol.md)：HTTP、回执、事实日志和故障恢复。
 - [插件](docs/plugins.md)：三个可运行的最小例子。
 - [安全边界](SECURITY.md)：密钥、执行权限和交付审查。
